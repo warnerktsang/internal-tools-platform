@@ -9,7 +9,6 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { decide } from '@/substrate/approvals';
-import { runEffects } from '@/substrate/effects';
 import { PRINCIPAL_COOKIE } from '@/substrate/identity';
 import { execute } from '@/substrate/operations';
 import { resourceByName } from '@/substrate/registry';
@@ -85,12 +84,4 @@ export async function decideApproval(formData: FormData): Promise<void> {
     params.set('message', outcome.reason);
   }
   redirect(`${path}?${params.toString()}`);
-}
-
-/** In production this is a queue consumer; in the prototype the demo drains it explicitly. */
-export async function drainEffects(formData: FormData): Promise<void> {
-  const results = await runEffects();
-  const returnTo = String(formData.get('returnTo') ?? '/');
-  revalidatePath(returnTo);
-  redirect(`${returnTo}?effects=${results.length}`);
 }

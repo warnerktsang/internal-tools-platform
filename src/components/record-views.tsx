@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { drainEffects, decideApproval, runAction } from '@/app/actions';
+import { decideApproval, runAction } from '@/app/actions';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Table, Td, Th } from '@/components/ui/primitives';
 import { formatDate, formatMoneyMinor } from '@/lib/utils';
 import type { Column, RegisteredResource } from '@/substrate/registry';
@@ -193,13 +193,6 @@ export function RecordDetail({
       ) : null}
 
       <AuditTimeline entries={view.history} />
-
-      <form action={drainEffects}>
-        <input type="hidden" name="returnTo" value={`/r/${entry.path}/${recordId}`} />
-        <Button type="submit" variant="outline">
-          Run effect worker
-        </Button>
-      </form>
     </div>
   );
 }
