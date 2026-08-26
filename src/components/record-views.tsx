@@ -179,17 +179,25 @@ export function RecordDetail({
                   {request.action} requested by {request.requesterId} · {request.requiredApprovers}{' '}
                   approver(s)
                 </span>
-                <input
-                  name="note"
-                  placeholder="note"
-                  className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
-                />
-                <Button type="submit" name="decision" value="approved">
-                  Approve
-                </Button>
-                <Button type="submit" name="decision" value="rejected" variant="danger">
-                  Reject
-                </Button>
+                {request.decidable.available ? (
+                  <>
+                    <input
+                      name="note"
+                      placeholder="note"
+                      className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                    />
+                    <Button type="submit" name="decision" value="approved">
+                      Approve
+                    </Button>
+                    <Button type="submit" name="decision" value="rejected" variant="danger">
+                      Reject
+                    </Button>
+                  </>
+                ) : (
+                  <span className="text-xs text-neutral-500" title={request.decidable.reason}>
+                    you cannot decide this: {request.decidable.reason}
+                  </span>
+                )}
               </form>
             ))}
           </CardBody>

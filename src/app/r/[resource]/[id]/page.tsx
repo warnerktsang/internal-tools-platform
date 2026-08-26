@@ -42,9 +42,6 @@ export default async function ResourceDetailPage({
   return (
     <div className="space-y-6">
       {status ? <OperationBanner status={status} message={message} reference={reference} /> : null}
-      {query.decision === 'recorded' ? (
-        <OperationBanner status="pending" message="Approval recorded; more approvers required." />
-      ) : null}
 
       {view.status === 'denied' ? (
         <Card>

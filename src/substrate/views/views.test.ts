@@ -261,4 +261,61 @@ describe('generated views', () => {
       });
     });
   });
+
+  describe('a parked approval on a record', () => {
+    async function park(requesterId: string) {
+      await db.approvalRequest.create({
+        data: {
+          id: 'req-1',
+          resource: 'kyc_case',
+          recordId: 'c1',
+          action: 'reject',
+          payload: {},
+          policy: 'compliance',
+          requiredApprovers: 1,
+          eligibleRoles: ['compliance_officer'],
+          excludeRequester: true,
+          requesterId,
+          requestId: 'rq-1',
+        },
+      });
+    }
+
+    it('is offered to an eligible approver', async () => {
+      await park('someone_else');
+      const officer = await seedPrincipal(
+        principal({
+          id: 'omar',
+          roles: ['analyst', 'compliance_officer'],
+          scopes: { business_unit: ['us'] },
+        }),
+      );
+
+      const view = await detailView(entry, 'c1', officer, { catalog });
+      if (view.status !== 'ok') throw new Error('expected ok');
+      expect(view.pendingApprovals[0].decidable).toEqual({ available: true });
+    });
+
+    it('is shown but not offered to the requester, so the button cannot precede the refusal', async () => {
+      await park(analyst.id);
+
+      const view = await detailView(entry, 'c1', analyst, { catalog });
+      if (view.status !== 'ok') throw new Error('expected ok');
+      expect(view.pendingApprovals[0].decidable).toEqual({
+        available: false,
+        reason: 'you requested this change; a different person must approve it',
+      });
+    });
+
+    it('is not offered to a principal without an eligible role, however global their read', async () => {
+      await park('someone_else');
+
+      const view = await detailView(entry, 'c1', auditor, { catalog });
+      if (view.status !== 'ok') throw new Error('expected ok');
+      expect(view.pendingApprovals[0].decidable).toEqual({
+        available: false,
+        reason: 'approval requires one of: compliance_officer',
+      });
+    });
+  });
 });

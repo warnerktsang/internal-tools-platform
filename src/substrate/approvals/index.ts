@@ -159,15 +159,21 @@ export async function decide<TRecord extends Record<string, unknown>>(
   return { status: 'applied', result };
 }
 
-async function eligibility<TRecord extends Record<string, unknown>>(args: {
-  def: ResourceDefinition<TRecord>;
-  request: { requesterId: string; excludeRequester: boolean; eligibleRoles: string[]; action: string };
-  approver: Principal;
-  record: Record<string, unknown>;
-  catalog?: PolicyCatalog;
-}): Promise<{ reason: string; rule?: string } | null> {
-  const { def, request, approver, record, catalog } = args;
+export type ApprovalEligibility = {
+  requesterId: string;
+  excludeRequester: boolean;
+  eligibleRoles: string[];
+};
 
+/**
+ * The one place separation of duties and role eligibility are decided, so the approver's
+ * queue, the buttons rendered on a record, and `decide()` itself cannot disagree about who
+ * may approve. Pure and synchronous: it needs the parked request, not the record.
+ */
+export function approvalRefusal(
+  request: ApprovalEligibility,
+  approver: Principal,
+): { reason: string; rule: string } | null {
   if (request.excludeRequester && approver.id === request.requesterId) {
     return {
       reason: 'you requested this change; a different person must approve it',
@@ -184,6 +190,21 @@ async function eligibility<TRecord extends Record<string, unknown>>(args: {
       rule: 'eligible_roles',
     };
   }
+
+  return null;
+}
+
+async function eligibility<TRecord extends Record<string, unknown>>(args: {
+  def: ResourceDefinition<TRecord>;
+  request: { requesterId: string; excludeRequester: boolean; eligibleRoles: string[]; action: string };
+  approver: Principal;
+  record: Record<string, unknown>;
+  catalog?: PolicyCatalog;
+}): Promise<{ reason: string; rule?: string } | null> {
+  const { def, request, approver, record, catalog } = args;
+
+  const refusal = approvalRefusal(request, approver);
+  if (refusal) return refusal;
 
   const decision = authorize(
     {
@@ -236,11 +257,6 @@ export async function pendingApprovalsFor(
   });
 
   return rows
-    .filter((row) => !(row.excludeRequester && row.requesterId === principal.id))
-    .filter(
-      (row) =>
-        row.eligibleRoles.length === 0 ||
-        row.eligibleRoles.some((role) => principal.roles.includes(role)),
-    )
+    .filter((row) => approvalRefusal(row, principal) === null)
     .map(({ excludeRequester: _e, eligibleRoles: _r, ...rest }) => rest);
 }

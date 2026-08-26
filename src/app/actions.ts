@@ -8,7 +8,7 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { decide } from '@/substrate/approvals';
+import { decide, type DecisionResult } from '@/substrate/approvals';
 import { PRINCIPAL_COOKIE } from '@/substrate/identity';
 import { execute } from '@/substrate/operations';
 import { resourceByName } from '@/substrate/registry';
@@ -24,6 +24,23 @@ function outcomeQuery(result: OperationResult<unknown>): string {
   if (result.status === 'unknown') params.set('reference', `effect ${result.effectId}`);
   if (result.status === 'pending') params.set('reference', `approval ${result.approvalRequestId}`);
   return params.toString();
+}
+
+/**
+ * A decision has its own outcomes, but the UI has one banner. Mapping them onto the same
+ * five statuses is what keeps a refused approval from returning a silent page.
+ */
+function decisionQuery(outcome: Exclude<DecisionResult, { status: 'applied' }>): string {
+  if (outcome.status === 'recorded') {
+    return new URLSearchParams({
+      status: 'pending',
+      message: `approval recorded; ${outcome.remaining} more approver(s) required`,
+    }).toString();
+  }
+  if (outcome.status === 'rejected') {
+    return new URLSearchParams({ status: 'ok', message: 'request rejected' }).toString();
+  }
+  return new URLSearchParams({ status: outcome.status, message: outcome.reason }).toString();
 }
 
 function payloadFrom(formData: FormData): Record<string, unknown> {
@@ -79,9 +96,5 @@ export async function decideApproval(formData: FormData): Promise<void> {
   revalidatePath(path);
 
   if (outcome.status === 'applied') redirect(`${path}?${outcomeQuery(outcome.result)}`);
-  const params = new URLSearchParams({ decision: outcome.status });
-  if (outcome.status === 'denied' || outcome.status === 'invalid') {
-    params.set('message', outcome.reason);
-  }
-  redirect(`${path}?${params.toString()}`);
+  redirect(`${path}?${decisionQuery(outcome)}`);
 }

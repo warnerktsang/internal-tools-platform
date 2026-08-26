@@ -8,6 +8,7 @@
  *   - action availability is decided here and sent as data, so the client renders a
  *     decision it cannot make or overturn.
  */
+import { approvalRefusal } from '@/substrate/approvals';
 import { newRequestId, recordDenial, recordRead } from '@/substrate/audit';
 import { authorize, hasPermission, scopeAccess, scopeFilter, type PolicyCatalog } from '@/substrate/authz';
 import { db } from '@/substrate/db';
@@ -48,7 +49,14 @@ export type DetailView =
       revealable: string[];
       revealed: string[];
       history: HistoryEntry[];
-      pendingApprovals: { id: string; action: string; requesterId: string; requiredApprovers: number }[];
+      pendingApprovals: {
+        id: string;
+        action: string;
+        requesterId: string;
+        requiredApprovers: number;
+        /** Whether *this* principal may decide it, and why not. Decided server-side. */
+        decidable: { available: boolean; reason?: string };
+      }[];
     };
 
 export type HistoryEntry = {
@@ -255,7 +263,14 @@ export async function detailView(
     }),
     client.approvalRequest.findMany({
       where: { resource: entry.def.name, recordId, state: 'pending' },
-      select: { id: true, action: true, requesterId: true, requiredApprovers: true },
+      select: {
+        id: true,
+        action: true,
+        requesterId: true,
+        requiredApprovers: true,
+        excludeRequester: true,
+        eligibleRoles: true,
+      },
     }),
   ]);
 
@@ -269,6 +284,19 @@ export async function detailView(
       seq: seq.toString(),
       at: createdAt,
     })),
-    pendingApprovals,
+    // Same rule `decide()` will apply, so an ineligible principal is never offered a
+    // button that would only be refused: the request is still listed, with the reason.
+    pendingApprovals: pendingApprovals.map(
+      ({ excludeRequester, eligibleRoles, ...request }) => {
+        const refusal = approvalRefusal(
+          { requesterId: request.requesterId, excludeRequester, eligibleRoles },
+          principal,
+        );
+        return {
+          ...request,
+          decidable: refusal ? { available: false, reason: refusal.reason } : { available: true },
+        };
+      },
+    ),
   };
 }
