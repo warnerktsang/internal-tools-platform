@@ -8,6 +8,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { parseAmountToMinor } from '@/apps/refunds/money';
+import { messageQuery, operationQuery } from '@/lib/operation-query';
 import { refundResource } from '@/apps/refunds/resource';
 import { db } from '@/substrate/db';
 import { create } from '@/substrate/operations/create';
@@ -20,11 +21,11 @@ export async function requestRefund(formData: FormData): Promise<void> {
 
   const amount = parseAmountToMinor(String(formData.get('amount') ?? ''));
   if (!amount.ok) {
-    redirect(`${back}?status=invalid&message=${encodeURIComponent(amount.reason)}`);
+    redirect(`${back}?${messageQuery('invalid', amount.reason)}`);
   }
 
   const payment = await db.payment.findUnique({ where: { id: paymentId } });
-  if (!payment) redirect(`${back}?status=invalid&message=${encodeURIComponent('unknown payment')}`);
+  if (!payment) redirect(`${back}?${messageQuery('invalid', 'unknown payment')}`);
 
   const result = await create({
     resource: refundResource,
@@ -44,9 +45,6 @@ export async function requestRefund(formData: FormData): Promise<void> {
 
   revalidatePath(back);
 
-  if (result.status !== 'ok') {
-    const message = 'reason' in result ? result.reason : result.status;
-    redirect(`${back}?status=${result.status}&message=${encodeURIComponent(message)}`);
-  }
-  redirect(`/r/refunds/${result.data.id}?status=ok&message=${encodeURIComponent('refund drafted')}`);
+  if (result.status !== 'ok') redirect(`${back}?${operationQuery(result)}`);
+  redirect(`/r/refunds/${result.data.id}?${messageQuery('ok', 'refund drafted')}`);
 }

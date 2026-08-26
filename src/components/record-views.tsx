@@ -116,6 +116,9 @@ export function RecordDetail({
   revealed: string[];
 }) {
   const { row } = view;
+  const generated = row.actions.filter(
+    (action) => !(entry.panelActions ?? []).includes(action.action),
+  );
 
   return (
     <div className="space-y-6">
@@ -149,15 +152,17 @@ export function RecordDetail({
         </CardBody>
       </Card>
 
-      {entry.detailPanel ? <entry.detailPanel recordId={recordId} data={row.data} /> : null}
+      {entry.detailPanel ? (
+        <entry.detailPanel recordId={recordId} data={row.data} actions={row.actions} />
+      ) : null}
 
-      {row.actions.length > 0 ? (
+      {generated.length > 0 ? (
       <Card>
         <CardHeader>
           <CardTitle>Actions</CardTitle>
         </CardHeader>
         <CardBody className="flex flex-wrap gap-2">
-          {row.actions.map((action) => (
+          {generated.map((action) => (
             <ActionButton key={action.action} entry={entry} recordId={recordId} action={action} />
           ))}
         </CardBody>

@@ -8,23 +8,12 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { operationQuery } from '@/lib/operation-query';
 import { decide, type DecisionResult } from '@/substrate/approvals';
 import { PRINCIPAL_COOKIE } from '@/substrate/identity';
 import { execute } from '@/substrate/operations';
 import { resourceByName } from '@/substrate/registry';
 import { requirePrincipal } from '@/substrate/session';
-import type { OperationResult } from '@/substrate/types';
-
-function outcomeQuery(result: OperationResult<unknown>): string {
-  const params = new URLSearchParams({ status: result.status });
-  if (result.status === 'denied' || result.status === 'invalid' || result.status === 'unknown') {
-    params.set('message', result.reason);
-  }
-  if (result.status === 'pending') params.set('message', `policy: ${result.policy}`);
-  if (result.status === 'unknown') params.set('reference', `effect ${result.effectId}`);
-  if (result.status === 'pending') params.set('reference', `approval ${result.approvalRequestId}`);
-  return params.toString();
-}
 
 /**
  * A decision has its own outcomes, but the UI has one banner. Mapping them onto the same
@@ -75,7 +64,7 @@ export async function runAction(formData: FormData): Promise<void> {
 
   const path = `/r/${entry.path}/${String(formData.get('recordId') ?? '')}`;
   revalidatePath(path);
-  redirect(`${path}?${outcomeQuery(result)}`);
+  redirect(`${path}?${operationQuery(result)}`);
 }
 
 export async function decideApproval(formData: FormData): Promise<void> {
@@ -95,6 +84,6 @@ export async function decideApproval(formData: FormData): Promise<void> {
   const path = `/r/${entry.path}/${String(formData.get('recordId') ?? '')}`;
   revalidatePath(path);
 
-  if (outcome.status === 'applied') redirect(`${path}?${outcomeQuery(outcome.result)}`);
+  if (outcome.status === 'applied') redirect(`${path}?${operationQuery(outcome.result)}`);
   redirect(`${path}?${decisionQuery(outcome)}`);
 }

@@ -11,6 +11,7 @@
  * starts two clicks from every moment worth showing, and the audit trail is genuine.
  */
 import '@/apps/register';
+import { kycCaseResource } from '@/apps/kyc/resource';
 import { receiveWebhook } from '@/apps/refunds/processor';
 import { refundResource } from '@/apps/refunds/resource';
 import { enableAuditBypass } from '@/substrate/audit/bypass';
@@ -55,6 +56,67 @@ const PAYMENTS = [
   },
 ];
 
+const KYC_CASES = [
+  {
+    id: 'kyc-1',
+    reference: 'KYC-4001',
+    businessUnitId: 'bu-consumer',
+    customerName: 'Marcus Webb',
+    ssn: '412-88-6789',
+    dob: new Date('1987-04-12T00:00:00Z'),
+    address: '218 Harlow Street, Apt 4B, Portland OR',
+    nationality: 'US',
+    riskScore: 22,
+    slaDays: 1,
+    documents: [{ kind: 'identity', filename: 'passport.pdf' }],
+  },
+  {
+    // High risk: approving this one is a compliance decision, not Nadia's.
+    id: 'kyc-2',
+    reference: 'KYC-4002',
+    businessUnitId: 'bu-consumer',
+    customerName: 'Lena Ortiz',
+    ssn: '523-19-4471',
+    dob: new Date('1994-11-02T00:00:00Z'),
+    address: '77 Beaumont Road, Austin TX',
+    nationality: 'MX',
+    riskScore: 81,
+    slaDays: 2,
+    documents: [
+      { kind: 'identity', filename: 'drivers-license.jpg' },
+      { kind: 'address', filename: 'utility-bill.pdf' },
+    ],
+  },
+  {
+    // No identity document: the approve guard refuses, which is the point of seeding it.
+    id: 'kyc-3',
+    reference: 'KYC-4003',
+    businessUnitId: 'bu-consumer',
+    customerName: 'Theo Baptiste',
+    ssn: '601-45-2210',
+    dob: new Date('1979-01-30T00:00:00Z'),
+    address: '9 Rue Mistral, Montreal QC',
+    nationality: 'CA',
+    riskScore: 64,
+    slaDays: 3,
+    documents: [{ kind: 'address', filename: 'lease.pdf' }],
+  },
+  {
+    // Another business unit, so a cross-BU denial is one click away.
+    id: 'kyc-4',
+    reference: 'KYC-5001',
+    businessUnitId: 'bu-smb',
+    customerName: 'Northgate Dental',
+    ssn: '755-32-0098',
+    dob: new Date('1968-07-19T00:00:00Z'),
+    address: '1400 Fielding Avenue, Columbus OH',
+    nationality: 'US',
+    riskScore: 35,
+    slaDays: 4,
+    documents: [{ kind: 'identity', filename: 'incorporation.pdf' }],
+  },
+];
+
 async function wipe(): Promise<void> {
   await db.$executeRawUnsafe(`
     TRUNCATE TABLE
@@ -83,6 +145,22 @@ async function insertFixtures(): Promise<void> {
           scopes: p.scopes,
         },
       });
+    }
+
+    for (const { slaDays, documents, ...kycCase } of KYC_CASES) {
+      await tx.kycCase.create({
+        data: { ...kycCase, slaDueAt: new Date(Date.now() + slaDays * 86_400_000) },
+      });
+      for (const document of documents) {
+        await tx.kycDocument.create({
+          data: {
+            caseId: kycCase.id,
+            kind: document.kind,
+            filename: document.filename,
+            storageKey: `s3://kyc-docs/${kycCase.reference}/${document.filename}`,
+          },
+        });
+      }
     }
 
     for (const payment of PAYMENTS) {
@@ -196,13 +274,60 @@ async function seedRefundScenarios(): Promise<void> {
   });
 }
 
+async function seedKycScenarios(): Promise<void> {
+  // A case already under review, claimed by the analyst who owns that business unit, so the
+  // decision panel is live on first load.
+  const claim = await execute({
+    resource: kycCaseResource,
+    action: 'claim',
+    recordId: 'kyc-1',
+    principal: principal('usr-nadia'),
+  });
+  if (claim.status !== 'ok') throw new Error(`seed: claiming KYC-4001: ${claim.status}`);
+
+  // A rejection parked on compliance: Nadia decided, Omar has to agree, and Nadia cannot
+  // approve her own request.
+  const claimed = await execute({
+    resource: kycCaseResource,
+    action: 'claim',
+    recordId: 'kyc-3',
+    principal: principal('usr-nadia'),
+  });
+  if (claimed.status !== 'ok') throw new Error(`seed: claiming KYC-4003: ${claimed.status}`);
+  const rejection = await execute({
+    resource: kycCaseResource,
+    action: 'reject',
+    recordId: 'kyc-3',
+    principal: principal('usr-nadia'),
+    payload: { reason: 'address document does not match the applicant; no identity evidence' },
+  });
+  if (rejection.status !== 'pending') {
+    throw new Error(`seed: rejecting KYC-4003 should park for compliance, got ${rejection.status}`);
+  }
+
+  await db.kycNote.create({
+    data: {
+      caseId: 'kyc-2',
+      authorId: 'usr-nadia',
+      body: 'Sanctions screening returned a weak name match; needs a second pair of eyes.',
+    },
+  });
+}
+
 async function main(): Promise<void> {
   await wipe();
   await insertFixtures();
   await seedRefundScenarios();
+  await seedKycScenarios();
 
-  const [refunds, events] = await Promise.all([db.refund.count(), db.auditEvent.count()]);
-  console.log(`seeded ${DEMO_PRINCIPALS.length} people, ${PAYMENTS.length} payments, ${refunds} refunds`);
+  const [refunds, cases, events] = await Promise.all([
+    db.refund.count(),
+    db.kycCase.count(),
+    db.auditEvent.count(),
+  ]);
+  console.log(
+    `seeded ${DEMO_PRINCIPALS.length} people, ${PAYMENTS.length} payments, ${refunds} refunds, ${cases} KYC cases`,
+  );
   console.log(`${events} audit events written by real operations`);
 }
 

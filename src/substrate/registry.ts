@@ -8,6 +8,7 @@
  */
 import type { ComponentType } from 'react';
 import type { ResourceDefinition } from '@/substrate/resource';
+import type { AvailableAction } from '@/substrate/views';
 
 export type Column = {
   field: string;
@@ -35,7 +36,18 @@ export type RegisteredResource = {
    * generation cannot invent (refunds' request form). Everything around it stays generated,
    * and the panel still goes through the operation gateway.
    */
-  detailPanel?: ComponentType<{ recordId: string; data: Record<string, unknown> }>;
+  detailPanel?: ComponentType<{
+    recordId: string;
+    data: Record<string, unknown>;
+    /** Server-computed availability, so a panel never decides for itself who may act. */
+    actions: AvailableAction[];
+  }>;
+  /**
+   * Actions whose payload the panel collects (a KYC decision needs a reason). The generated
+   * action card omits them rather than offering a second, payload-less button that the
+   * app's own guard would then reject.
+   */
+  panelActions?: string[];
 };
 
 const registry = new Map<string, RegisteredResource>();
