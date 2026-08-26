@@ -9,6 +9,24 @@ jobs:
   verify:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: itp
+          POSTGRES_PASSWORD: itp
+          POSTGRES_DB: itp
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U itp -d itp"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://itp:itp@localhost:5433/itp?schema=public
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,6 +40,8 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      - run: pnpm db:migrate:deploy
 
       - run: pnpm typecheck
 

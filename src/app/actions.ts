@@ -1,0 +1,89 @@
+/**
+ * The only way the UI reaches domain state: a server action that resolves the resource
+ * from the registry and hands it to `execute()`. There is no per-app route, and no client
+ * code path that could skip authorization.
+ */
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { operationQuery } from '@/lib/operation-query';
+import { decide, type DecisionResult } from '@/substrate/approvals';
+import { PRINCIPAL_COOKIE } from '@/substrate/identity';
+import { execute } from '@/substrate/operations';
+import { resourceByName } from '@/substrate/registry';
+import { requirePrincipal } from '@/substrate/session';
+
+/**
+ * A decision has its own outcomes, but the UI has one banner. Mapping them onto the same
+ * five statuses is what keeps a refused approval from returning a silent page.
+ */
+function decisionQuery(outcome: Exclude<DecisionResult, { status: 'applied' }>): string {
+  if (outcome.status === 'recorded') {
+    return new URLSearchParams({
+      status: 'pending',
+      message: `approval recorded; ${outcome.remaining} more approver(s) required`,
+    }).toString();
+  }
+  if (outcome.status === 'rejected') {
+    return new URLSearchParams({ status: 'ok', message: 'request rejected' }).toString();
+  }
+  return new URLSearchParams({ status: outcome.status, message: outcome.reason }).toString();
+}
+
+function payloadFrom(formData: FormData): Record<string, unknown> {
+  const raw = formData.get('payload');
+  if (typeof raw !== 'string' || raw.trim() === '') return {};
+  const parsed: unknown = JSON.parse(raw);
+  return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : {};
+}
+
+export async function switchPrincipal(formData: FormData): Promise<void> {
+  const id = String(formData.get('principalId') ?? '');
+  const store = await cookies();
+  store.set(PRINCIPAL_COOKIE, id, { httpOnly: true, sameSite: 'lax', path: '/' });
+  redirect(String(formData.get('returnTo') ?? '/'));
+}
+
+export async function runAction(formData: FormData): Promise<void> {
+  const principal = await requirePrincipal();
+  const resourceName = String(formData.get('resource') ?? '');
+  const entry = resourceByName(resourceName);
+  if (!entry) throw new Error(`resource '${resourceName}' is not registered`);
+
+  const result = await execute({
+    resource: entry.def,
+    action: String(formData.get('action') ?? ''),
+    recordId: String(formData.get('recordId') ?? ''),
+    principal,
+    payload: payloadFrom(formData),
+  });
+
+  const path = `/r/${entry.path}/${String(formData.get('recordId') ?? '')}`;
+  revalidatePath(path);
+  redirect(`${path}?${operationQuery(result)}`);
+}
+
+export async function decideApproval(formData: FormData): Promise<void> {
+  const approver = await requirePrincipal();
+  const resourceName = String(formData.get('resource') ?? '');
+  const entry = resourceByName(resourceName);
+  if (!entry) throw new Error(`resource '${resourceName}' is not registered`);
+
+  const outcome = await decide({
+    resource: entry.def,
+    approvalRequestId: String(formData.get('approvalRequestId') ?? ''),
+    approver,
+    decision: formData.get('decision') === 'rejected' ? 'rejected' : 'approved',
+    note: String(formData.get('note') ?? '') || undefined,
+  });
+
+  const path = `/r/${entry.path}/${String(formData.get('recordId') ?? '')}`;
+  revalidatePath(path);
+
+  if (outcome.status === 'applied') redirect(`${path}?${operationQuery(outcome.result)}`);
+  redirect(`${path}?${decisionQuery(outcome)}`);
+}

@@ -9,7 +9,16 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:up": "docker compose up -d",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:reset": "prisma migrate reset --force",
+    "db:generate": "prisma generate",
+    "db:seed": "dotenv -e .env -- tsx src/seed/cli.ts",
+    "vercel-build": "prisma migrate deploy && next build",
+    "audit:verify": "dotenv -e .env -- tsx src/substrate/audit/verify-cli.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "6.16.2",

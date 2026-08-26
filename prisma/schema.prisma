@@ -1,0 +1,306 @@
+// Internal tools platform.
+//
+// Two kinds of tables live here and the distinction is the whole point of the repo:
+//
+//   SUBSTRATE  - authorization, audit, approvals, idempotency, effects. Written once,
+//                shared by every app, and the only path by which domain state changes.
+//   DOMAIN     - per-app tables (kyc_*, payments/refunds/*, flags/*). Thin, and free of
+//                any authorization, audit or approval logic.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// SUBSTRATE
+// ---------------------------------------------------------------------------
+
+/// Seeded identities. In production this table is replaced by an OIDC adapter:
+/// the substrate only ever sees a Principal, never an IdP.
+model Principal {
+  id          String   @id
+  kind        String // 'human' | 'system'
+  email       String?  @unique
+  displayName String
+  title       String?
+  /// Role names; resolved to permissions by the policy engine (code, not data).
+  roles       String[]
+  /// Scope grants per named dimension, e.g. { business_unit: ["us"], environment: ["dev"] }.
+  /// '*' means global within that dimension.
+  scopes      Json
+  createdAt   DateTime @default(now())
+
+  @@map("principals")
+}
+
+/// Append-only, hash-chained trail. Covers writes, reads-of-sensitive-fields,
+/// approval decisions and authorization denials, for every app, human or system.
+model AuditEvent {
+  seq            BigInt   @id @default(autoincrement())
+  /// 'write' | 'read' | 'decision' | 'auth_denied'
+  kind           String
+  actorId        String
+  actorRoles     String[]
+  actorScope     Json
+  resource       String
+  recordId       String?
+  action         String
+  /// Projected through the field policy: the trail must not become an unmasked PII store.
+  before         Json?
+  after          Json?
+  /// Sensitive fields revealed by a read operation.
+  fields         String[]
+  reason         String?
+  requestId      String
+  idempotencyKey String?
+  /// Postgres transaction id, used by the deferred integrity trigger that rejects any
+  /// domain mutation not accompanied by an audit row in the same transaction.
+  txId           BigInt
+  prevHash       String?
+  hash           String
+  createdAt      DateTime @default(now())
+
+  @@index([resource, recordId, seq])
+  @@index([actorId, seq])
+  @@index([kind, seq])
+  @@map("audit_events")
+}
+
+/// An operation that was authorized and validated but parked pending human approval.
+/// The payload is replayed verbatim on approval, so what was reviewed is what commits.
+model ApprovalRequest {
+  id                String     @id @default(cuid())
+  resource          String
+  recordId          String
+  action            String
+  payload           Json
+  policy            String
+  requiredApprovers Int
+  eligibleRoles     String[]
+  excludeRequester  Boolean    @default(true)
+  requesterId       String
+  /// 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'stale'
+  state             String     @default("pending")
+  requestId         String
+  createdAt         DateTime   @default(now())
+  resolvedAt        DateTime?
+  approvals         Approval[]
+
+  @@index([state, createdAt])
+  @@index([resource, recordId])
+  @@map("approval_requests")
+}
+
+model Approval {
+  id         String          @id @default(cuid())
+  requestId  String
+  request    ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approverId String
+  /// 'approved' | 'rejected'
+  decision   String
+  note       String?
+  createdAt  DateTime        @default(now())
+
+  @@unique([requestId, approverId])
+  @@map("approvals")
+}
+
+/// Key -> stored outcome. A replayed intent returns the original result rather than
+/// performing the action twice.
+model IdempotencyRecord {
+  key       String   @id
+  resource  String
+  recordId  String?
+  action    String
+  outcome   Json
+  createdAt DateTime @default(now())
+
+  @@map("idempotency_records")
+}
+
+/// Transactional outbox. Enqueued in the same transaction as the domain write, executed
+/// after commit: an external call can neither be lost nor happen without a record.
+model Effect {
+  id             String    @id @default(cuid())
+  port           String
+  operation      String
+  payload        Json
+  idempotencyKey String    @unique
+  /// 'queued' | 'running' | 'succeeded' | 'failed' | 'unknown'
+  state          String    @default("queued")
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(4)
+  lastError      String?
+  /// Resource/record the effect reports back to when it completes.
+  resource       String
+  recordId       String
+  requestId      String
+  nextAttemptAt  DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  completedAt    DateTime?
+
+  @@index([state, nextAttemptAt])
+  @@map("effects")
+}
+
+// ---------------------------------------------------------------------------
+// DOMAIN: KYC review queue
+// ---------------------------------------------------------------------------
+
+model KycCase {
+  id             String   @id @default(cuid())
+  reference      String   @unique
+  businessUnitId String
+  customerName   String
+  /// Restricted fields. Masked by the field policy; readable only via an audited reveal.
+  ssn            String
+  dob            DateTime
+  address        String
+  nationality    String
+  riskScore      Int
+  /// new | in_review | info_requested | escalated | approved | rejected
+  state          String   @default("new")
+  assigneeId     String?
+  decisionReason String?
+  slaDueAt       DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  documents KycDocument[]
+  notes     KycNote[]
+
+  @@index([businessUnitId, state])
+  @@map("kyc_cases")
+}
+
+model KycDocument {
+  id         String   @id @default(cuid())
+  caseId     String
+  case       KycCase  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  kind       String
+  filename   String
+  /// Fake object-store key; access is issued as a short-lived signed URL and audited.
+  storageKey String
+  uploadedAt DateTime @default(now())
+
+  @@map("kyc_documents")
+}
+
+model KycNote {
+  id        String   @id @default(cuid())
+  caseId    String
+  case      KycCase  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  @@map("kyc_notes")
+}
+
+// ---------------------------------------------------------------------------
+// DOMAIN: Refunds
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id             String   @id @default(cuid())
+  reference      String   @unique
+  businessUnitId String
+  customerName   String
+  /// Integer minor units. No floats anywhere, including the UI and the CSV export.
+  capturedMinor  Int
+  currency       String   @default("USD")
+  processorRef   String
+  capturedAt     DateTime
+  createdAt      DateTime @default(now())
+
+  refunds Refund[]
+
+  @@index([businessUnitId])
+  @@map("payments")
+}
+
+model Refund {
+  id             String    @id @default(cuid())
+  reference      String    @unique
+  paymentId      String
+  payment        Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  businessUnitId String
+  amountMinor    Int
+  currency       String    @default("USD")
+  /// draft | pending_approval | approved | submitted | succeeded | failed | unknown | rejected
+  state          String    @default("draft")
+  reason         String
+  requesterId    String
+  processorRef   String?
+  /// Set when the processor outcome is genuinely undetermined (timeout != failure).
+  unknownSince   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([businessUnitId, state])
+  @@map("refunds")
+}
+
+/// Raw inbound processor webhooks, deduplicated on external id. Kept so that duplicate
+/// and out-of-order delivery is visible in the UI rather than hidden inside tests.
+model ProcessorEvent {
+  id          String    @id @default(cuid())
+  externalId  String    @unique
+  type        String
+  refundRef   String?
+  payload     Json
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  /// 'applied' | 'duplicate' | 'out_of_order_converged' | 'unmatched'
+  disposition String?
+
+  @@map("processor_events")
+}
+
+// ---------------------------------------------------------------------------
+// DOMAIN: Feature flags
+// ---------------------------------------------------------------------------
+
+model Flag {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String
+  ownerId     String
+  createdAt   DateTime @default(now())
+
+  configs FlagConfig[]
+
+  @@map("flags")
+}
+
+model FlagConfig {
+  id String @id @default(cuid())
+
+  flagId String
+  flag   Flag   @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  /// The scope dimension for this app is `environment`, not business_unit.
+  environment String
+  enabled     Boolean @default(false)
+  rolloutPct  Int     @default(0)
+  /// [{ attribute, operator, values }]
+  targeting   Json    @default("[]")
+  /// Optimistic concurrency: an approved change is applied only against the version it
+  /// was reviewed against.
+  version     Int     @default(1)
+  /// live | publishing | publish_failed
+  state       String  @default("live")
+  /// Lags `version` while a publish is in flight: what the SDK is actually serving.
+  publishedVersion Int     @default(1)
+  publishError     String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([flagId, environment])
+  @@index([environment])
+  @@map("flag_configs")
+}
