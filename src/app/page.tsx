@@ -10,6 +10,12 @@ export default async function HomePage() {
   if (!principal) return <SelectPrincipal />;
 
   const resources = registeredResources();
+  // One card per app, not per resource: refunds registers both payments and refunds under the
+  // same app name, and a card each made the app look listed twice.
+  const apps = new Map<string, typeof resources>();
+  for (const entry of resources) {
+    apps.set(entry.app, [...(apps.get(entry.app) ?? []), entry]);
+  }
 
   return (
     <div className="space-y-6">
@@ -33,19 +39,23 @@ export default async function HomePage() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {resources.map((entry) => (
-          <Card key={entry.path}>
+        {[...apps].map(([app, entries]) => (
+          <Card key={app}>
             <CardHeader>
-              <CardTitle>{entry.app}</CardTitle>
+              <CardTitle>{app}</CardTitle>
             </CardHeader>
-            <CardBody className="text-sm">
-              <Link href={`/r/${entry.path}`} className="underline">
-                {entry.nav}
-              </Link>
-              <p className="mt-1 text-xs text-neutral-500">
-                scope: {entry.def.scope?.dimension ?? 'global'} · states:{' '}
-                {entry.def.machine.states.join(', ')}
-              </p>
+            <CardBody className="space-y-3 text-sm">
+              {entries.map((entry) => (
+                <div key={entry.path}>
+                  <Link href={`/r/${entry.path}`} className="underline">
+                    {entry.nav}
+                  </Link>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    scope: {entry.def.scope?.dimension ?? 'global'} · states:{' '}
+                    {entry.def.machine.states.join(', ')}
+                  </p>
+                </div>
+              ))}
             </CardBody>
           </Card>
         ))}
