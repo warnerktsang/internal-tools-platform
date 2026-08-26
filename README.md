@@ -67,7 +67,7 @@ the header (see [Who to log in as](#who-to-log-in-as)).
 ### Verification
 
 ```bash
-pnpm test            # 156 tests, run against the real database
+pnpm test            # 159 tests, run against the real database
 pnpm audit:verify    # walks the audit hash chain and reports the first break
 pnpm typecheck && pnpm lint && pnpm build
 ```
@@ -94,6 +94,43 @@ A local Postgres listens on **5432**, so edit `.env` to
 | `Can't reach database server` | Docker isn't ready. `docker compose ps` should show `itp-postgres` as healthy. |
 | Stale UI after switching branches | `rm -rf .next && pnpm dev` |
 | Want a clean slate | `docker compose down -v && pnpm db:up && pnpm db:migrate:deploy && pnpm db:seed` |
+
+---
+
+## Deploy it as a shared staging link
+
+Nothing here is Vercel-specific — there is no `vercel.json` and no deploy workflow — but the app
+is a plain Next.js App Router project, so a hosted demo is a managed Postgres plus two dashboard
+settings. Roughly ten minutes, no code changes.
+
+1. **Database.** Create a project in [Neon](https://neon.tech) (or Vercel Postgres) and copy the
+   connection string. Take the **direct** (non-pooled) one — Prisma runs interactive transactions
+   and `migrate deploy`, and demo traffic does not need a pooler.
+2. **Project.** In Vercel, *Add New → Project*, import this repository, and set *Production
+   Branch* to the branch you want the link to serve (the stack tip, not `main`, until the PRs are
+   merged). Framework detection and `pnpm install` need no changes; `prisma generate` already runs
+   from `postinstall`.
+3. **Environment.** Add `DATABASE_URL` (all environments). That is the only variable the app
+   reads — the principal switcher is a cookie, not a session secret.
+4. **Migrations.** Override *Settings → Build & Development → Build Command* with
+   `pnpm prisma migrate deploy && pnpm build`, so every deploy brings the schema forward.
+5. **Seed once**, from any machine with the repo checked out:
+   `DATABASE_URL='<the same string>' pnpm db:seed`. The seed writes through real operations, so it
+   also proves the deployed schema and the audit triggers work.
+6. **Deploy**, open the URL, pick a person, and press **Run effect worker** on any record whose
+   state is in flight.
+
+Three things to know before sharing the link:
+
+- **The effect worker is manual.** `runEffects()` is a button, not a daemon — which is fine on
+  serverless and arguably better for a demo, since the async boundary is visible. Unattended
+  processing would need Vercel Cron hitting a route, and that is a real gap, not a detail.
+- **Visitors share one mutable database.** Approvals get consumed and flags get ramped. Reseed
+  with `pnpm db:seed` (it upserts) whenever the demo has drifted.
+- **Anyone can be anyone.** The switcher is the point, and the data is fake. The identity seam
+  refuses to authenticate as a system principal, so a hand-written cookie cannot borrow the
+  permissions the effect workers hold — but there is no authentication here, and there is not
+  meant to be.
 
 ---
 

@@ -49,6 +49,12 @@ export function toPrincipal(row: PrincipalRow): Principal {
  * Demo identity provider: the current principal is whichever seeded row the switcher
  * cookie names. Roles and scopes still come from the database, and every downstream
  * decision is made by the real policy engine.
+ *
+ * The cookie is unauthenticated, so it is treated as a claim about *which human* is
+ * browsing, never as proof of anything: a request may only ever authenticate as a human.
+ * System principals exist to attribute background work and hold permissions no human has
+ * (settling refunds, publishing flag configs), so a hand-written cookie naming one must
+ * not become a session.
  */
 export const seededIdentityProvider: IdentityProvider = {
   name: 'seeded',
@@ -56,7 +62,8 @@ export const seededIdentityProvider: IdentityProvider = {
     const store = await cookies();
     const id = store.get(PRINCIPAL_COOKIE)?.value;
     if (!id) return null;
-    return getPrincipalById(id);
+    const principal = await getPrincipalById(id);
+    return principal?.kind === 'human' ? principal : null;
   },
 };
 

@@ -26,7 +26,6 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://itp:itp@localhost:5433/itp?schema=public
-      SESSION_SECRET: ci-only-not-a-secret
 
     steps:
       - uses: actions/checkout@v4
