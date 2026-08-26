@@ -40,14 +40,32 @@ System principal `sys-refund-settler` performs outbox effects.
 - Audit: `/audit` (any principal, meaningful as Ava) shows a "verified · N events" hash-chain badge plus
   every write/decision/auth_denied event.
 
-## Known UI gaps to watch for (may be fixed later)
-- Approval denials are enforced and audited server-side but may render **no banner**: `decideApproval`
-  redirects with `?decision=denied&message=…` while the detail page only renders a banner for
-  `decision === 'recorded'`. Check the History table for an `auth_denied` row to confirm the server did
-  the right thing, and treat the missing banner as a UI bug.
-- The "Awaiting approval" Approve/Reject buttons are rendered enabled to every principal who can read
-  the record (including the requester and read-only auditors) because `detailView.pendingApprovals` is
-  not eligibility-filtered. Regular action buttons ARE correctly disabled with a reason tooltip.
+## Operation statuses and how to make each one render
+The single `OperationBanner` reads `?status=<ok|pending|denied|invalid|unknown>&message=…`:
+- `ok` (green "Applied") — any successful action, e.g. **Draft refund**.
+- `pending` (amber "Awaiting approval") — submit above the $100 threshold.
+- `invalid` (slate) — draft a refund larger than the remaining captured amount.
+- `denied` (red) — see the stale-page trick below.
+- `unknown` (blue) — NOT reachable as an operation banner: processor uncertainty is produced by the
+  outbox worker under the system principal, so `unknown` only ever appears as a record **state** badge
+  (with `unknownSince` set). Report it as unreachable rather than as a rendering failure.
+
+### Producing a real `denied` banner without devtools/curl
+Ineligible actions are correctly hidden or disabled, so the honest way to hit the server's denial path
+is a stale tab: open the record in tab 1 while acting as a principal who *may* act (e.g. Priya with
+`reconcile` enabled, or Priya with Approve on a pending request), switch the principal to someone
+ineligible in tab 2, then submit the still-rendered form in tab 1. Expect a red **Denied** badge, the
+hint "You do not hold the authority for this action.", an unchanged record, and an `auth_denied` row in
+History and `/audit`. Note Chrome may restore the old "Acting as" `<select>` value on the stale tab —
+trust the disabled-button tooltips / server render, not the select, to tell who is acting.
+
+## Historical UI gaps (fixed in 87e694e — re-check if they regress)
+- Approval denials used to redirect with `?decision=denied` and render **no banner**; they now map onto
+  the shared statuses. If a denial returns silently, that regression is back.
+- The "Awaiting approval" Approve/Reject buttons used to render enabled for everyone who could read the
+  record. Now `detailView.pendingApprovals[].decidable` gates them, and ineligible principals see the
+  request still listed with "you cannot decide this: <reason>" (separation of duties for the requester,
+  "approval requires one of: finance_manager" for others).
 
 ## Devin Secrets Needed
 None — `.env` in the repo (or `.env.example`) supplies the local Postgres URL and a dev session secret.
