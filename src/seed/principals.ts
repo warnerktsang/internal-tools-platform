@@ -42,6 +42,17 @@ export const DEMO_PRINCIPALS: Principal[] = [
     scopes: { business_unit: ['bu-consumer'] },
   },
   {
+    // A second analyst in the same business unit, so "the case is claimed by someone else"
+    // is a state the demo can actually reach.
+    id: 'usr-lea',
+    kind: 'human',
+    email: 'lea@example.com',
+    displayName: 'Lea Fontaine',
+    title: 'KYC analyst, Consumer',
+    roles: ['kyc_analyst'],
+    scopes: { business_unit: ['bu-consumer'] },
+  },
+  {
     id: 'usr-raj',
     kind: 'human',
     email: 'raj@example.com',
