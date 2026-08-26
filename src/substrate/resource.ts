@@ -21,6 +21,12 @@ export type RecordDelegate = {
     where: { id: string };
     data: Record<string, unknown>;
   }): Promise<Record<string, unknown>>;
+  findMany(args: {
+    where?: Record<string, unknown>;
+    orderBy?: Record<string, 'asc' | 'desc'>;
+    take?: number;
+  }): Promise<Record<string, unknown>[]>;
+  count(args: { where?: Record<string, unknown> }): Promise<number>;
 };
 
 export type ResourceDefinition<TRecord extends Record<string, unknown>> = {
