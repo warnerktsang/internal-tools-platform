@@ -67,7 +67,7 @@ the header (see [Who to log in as](#who-to-log-in-as)).
 ### Verification
 
 ```bash
-pnpm test            # 159 tests, run against the real database
+pnpm test            # 161 tests, run against the real database
 pnpm audit:verify    # walks the audit hash chain and reports the first break
 pnpm typecheck && pnpm lint && pnpm build
 ```
@@ -117,14 +117,17 @@ settings. Roughly ten minutes, no code changes.
 5. **Seed once**, from any machine with the repo checked out:
    `DATABASE_URL='<the same string>' pnpm db:seed`. The seed writes through real operations, so it
    also proves the deployed schema and the audit triggers work.
-6. **Deploy**, open the URL, pick a person, and press **Run effect worker** on any record whose
-   state is in flight.
+6. **Deploy**, open the URL and pick a person. Actions settle within the request, so there is
+   nothing to run by hand.
 
 Three things to know before sharing the link:
 
-- **The effect worker is manual.** `runEffects()` is a button, not a daemon — which is fine on
-  serverless and arguably better for a demo, since the async boundary is visible. Unattended
-  processing would need Vercel Cron hitting a route, and that is a real gap, not a detail.
+- **External calls happen inside the request.** The outbox row commits with the write, and the
+  operation then drains that one row before returning, so a refund or a publish is synchronous
+  from the UI's point of view. What is missing is a sweep — if the process dies between the commit
+  and the call, the row waits for a `runEffects()` consumer that is not deployed. That is a real
+  gap, not a detail: production would run this loop as Vercel Cron or a queue consumer, against
+  the same rows.
 - **Visitors share one mutable database.** Approvals get consumed and flags get ramped. Reseed
   with `pnpm db:seed` (it upserts) whenever the demo has drifted.
 - **Anyone can be anyone.** The switcher is the point, and the data is fake. The identity seam
@@ -211,7 +214,7 @@ flowchart TB
   AP -->|parks| PR["approval_requests (payload + baseline)"]
   AP -->|proceeds| TX["one transaction: state + audit row + effect intent"]
   PR -->|second person approves| TX
-  TX --> WK["effect worker (after commit)"]
+  TX --> WK["effect run inline, after commit"]
   WK --> PT["typed port: fake Stripe / flag service / doc store"]
   PT --> EX
 ```
@@ -228,9 +231,10 @@ generated CRUD app that merely looks similar in a screenshot:
    Postgres trigger — writing domain state without an audit row fails at the database, so "no
    writes outside the transition layer" is a guarantee rather than a convention.
 5. **External calls happen outside the transaction**, via a transactional outbox: intent commits
-   with the state change, the worker calls the port after commit with an idempotency key, and the
-   outcome re-enters `execute()` as a new operation under a system principal. A timeout is
-   `unknown`, never silently `failed`.
+   with the state change, then `execute()` calls the port — after commit, before it returns —
+   with an idempotency key, and the outcome re-enters `execute()` as a new operation under a
+   system principal. A timeout is `unknown`, never silently `failed`. The queue exists for
+   ordering and replay safety, not to defer the work: the caller waits for the outcome.
 
 Every operation returns one of five statuses that never collapse into a single red toast:
 `ok` · `pending` · `denied` · `invalid` · `unknown`. An authority violation, a fat-fingered
