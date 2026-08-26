@@ -13,10 +13,26 @@ That claim is measured, not asserted. See [Evidence](#evidence-what-did-each-app
 
 ---
 
+## Try it: https://internal-tools-platform-warners-projects-19e96c15.vercel.app
+
+A hosted deployment with the demo data already seeded — nothing to install. **There is no login
+screen: pick a person from the *Acting as* dropdown in the header first**, or every screen will
+tell you no principal is selected. Who to be, and what to do, is below:
+[Who to log in as](#who-to-log-in-as) and
+[Four workflows worth trying](#four-workflows-worth-trying).
+
+Two things about the hosted copy specifically: every visitor shares one database, so approvals
+get consumed and flags get ramped as people click (it is reset by
+[`POST /api/demo/reseed`](#deploy-it-as-a-shared-staging-link)); and the data is fake, the
+third-party providers are in-process fakes, and there is no authentication by design — the
+principal switcher *is* the demo. Do not put anything real behind a link like this.
+
+---
+
 ## Run it locally
 
-You need **Node 20+**, **pnpm 10+**, and **Docker** (only to run Postgres; there is a no-Docker
-fallback below).
+Only needed to run the tests, inspect the database, or develop. You need **Node 20+**,
+**pnpm 10+**, and **Docker** (only to run Postgres; there is a no-Docker fallback below).
 
 <details>
 <summary>Installing those from scratch — macOS</summary>
@@ -105,14 +121,16 @@ a managed Postgres plus two environment variables. Roughly ten minutes, no code 
 1. **Database.** Create a project in [Neon](https://neon.tech) (or Vercel Postgres) and copy the
    connection string. Take the **direct** (non-pooled) one — Prisma runs interactive transactions
    and `migrate deploy`, and demo traffic does not need a pooler.
-2. **Project.** In Vercel, *Add New → Project*, import this repository, and set *Production
-   Branch* to the branch you want the link to serve (the stack tip, not `main`, until the PRs are
-   merged). Framework detection needs no changes: `vercel.json` supplies the build command and
-   `prisma generate` already runs from `postinstall`.
+2. **Project.** In Vercel, *Add New → Project*, import this repository. `main` is the production
+   branch, and framework detection needs no changes: `vercel.json` supplies the build command and
+   `prisma generate` already runs from `postinstall`. If the link is for other people, turn
+   *Settings → Deployment Protection → Vercel Authentication* **off**, or they will be asked to
+   log in to Vercel instead of seeing the app.
 3. **Environment.** Add `DATABASE_URL` and `ADMIN_TOKEN` (any long random string) for all
    environments. Nothing else — the principal switcher is a cookie, not a session secret.
 4. **Deploy.** The build runs the migrations, so the schema is live before the first request.
-5. **Seed once**, by calling the reseed route with the token you just set:
+5. **Seed once** — this is what creates the data, not just a reset: the build gives the database
+   its schema, this gives it its contents. Call the reseed route with the token you just set:
    `curl -X POST "https://<your-app>.vercel.app/api/demo/reseed?token=$ADMIN_TOKEN"`. It runs the
    same seed the CLI does — through real operations — so it also proves the deployed schema and
    audit triggers work. `DATABASE_URL='<the string>' pnpm db:seed` from a local checkout does the

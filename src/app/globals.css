@@ -1,26 +1,28 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/**
+ * A softened neutral ramp, overriding Tailwind's default.
+ *
+ * The screens are dense tables of masked fields, state badges and refusal messages, so the
+ * defaults read harshly: near-black text and solid-black buttons against white cards. Both
+ * ends of the scale are pulled in and given a slight cool cast, which keeps every existing
+ * `*-neutral-*` class in the components on one calmer palette. The muted end stays above
+ * 4.5:1 on white, since that is what labels, timestamps and masked values are written in.
+ */
+@theme {
+  --color-neutral-50: #f2f4f7;
+  --color-neutral-100: #e9ecf1;
+  --color-neutral-200: #dde2e9;
+  --color-neutral-300: #c6ccd6;
+  --color-neutral-400: #98a1ad;
+  --color-neutral-500: #6f7885;
+  --color-neutral-600: #5a636f;
+  --color-neutral-700: #474f5a;
+  --color-neutral-800: #3a414b;
+  --color-neutral-900: #2f353e;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
 }
