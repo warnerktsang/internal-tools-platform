@@ -11,6 +11,7 @@
  * starts two clicks from every moment worth showing, and the audit trail is genuine.
  */
 import '@/apps/register';
+import { flagConfigResource } from '@/apps/flags/resource';
 import { kycCaseResource } from '@/apps/kyc/resource';
 import { receiveWebhook } from '@/apps/refunds/processor';
 import { refundResource } from '@/apps/refunds/resource';
@@ -117,6 +118,30 @@ const KYC_CASES = [
   },
 ];
 
+const FLAGS = [
+  {
+    id: 'flag-checkout-v2',
+    key: 'checkout_v2',
+    description: 'New checkout flow. Ramping in production.',
+    ownerId: 'usr-sam',
+    configs: [
+      { environment: 'development', enabled: true, rolloutPct: 100 },
+      { environment: 'staging', enabled: true, rolloutPct: 50 },
+      { environment: 'production', enabled: true, rolloutPct: 10 },
+    ],
+  },
+  {
+    id: 'flag-instant-payouts',
+    key: 'instant_payouts',
+    description: 'Instant payouts for verified merchants. Off in production.',
+    ownerId: 'usr-rel',
+    configs: [
+      { environment: 'development', enabled: true, rolloutPct: 100 },
+      { environment: 'production', enabled: false, rolloutPct: 0 },
+    ],
+  },
+];
+
 async function wipe(): Promise<void> {
   await db.$executeRawUnsafe(`
     TRUNCATE TABLE
@@ -160,6 +185,13 @@ async function insertFixtures(): Promise<void> {
             storageKey: `s3://kyc-docs/${kycCase.reference}/${document.filename}`,
           },
         });
+      }
+    }
+
+    for (const { configs, ...flag } of FLAGS) {
+      await tx.flag.create({ data: flag });
+      for (const config of configs) {
+        await tx.flagConfig.create({ data: { ...config, flagId: flag.id } });
       }
     }
 
@@ -314,19 +346,55 @@ async function seedKycScenarios(): Promise<void> {
   });
 }
 
+async function seedFlagScenarios(): Promise<void> {
+  const config = async (flagId: string, environment: string): Promise<string> => {
+    const row = await db.flagConfig.findFirst({ where: { flagId, environment } });
+    if (!row) throw new Error(`seed: no ${flagId} config for ${environment}`);
+    return row.id;
+  };
+
+  // A staging ramp Sam did himself: in his environments, no approval, published and live.
+  const staging = await config('flag-checkout-v2', 'staging');
+  const ramp = await execute({
+    resource: flagConfigResource,
+    action: 'update',
+    recordId: staging,
+    principal: principal('usr-sam'),
+    payload: { enabled: true, rolloutPct: 75, expectedVersion: 1 },
+  });
+  if (ramp.status !== 'ok') throw new Error(`seed: staging ramp: ${ramp.status}`);
+  await runEffects();
+
+  // A production ramp parked on a second release manager: Renee proposed 10% -> 40%, and
+  // she cannot approve her own change.
+  const production = await config('flag-checkout-v2', 'production');
+  const parked = await execute({
+    resource: flagConfigResource,
+    action: 'update',
+    recordId: production,
+    principal: principal('usr-rel'),
+    payload: { enabled: true, rolloutPct: 40, expectedVersion: 1 },
+  });
+  if (parked.status !== 'pending') {
+    throw new Error(`seed: production ramp should park, got ${parked.status}`);
+  }
+}
+
 async function main(): Promise<void> {
   await wipe();
   await insertFixtures();
   await seedRefundScenarios();
   await seedKycScenarios();
+  await seedFlagScenarios();
 
-  const [refunds, cases, events] = await Promise.all([
+  const [refunds, cases, configs, events] = await Promise.all([
     db.refund.count(),
     db.kycCase.count(),
+    db.flagConfig.count(),
     db.auditEvent.count(),
   ]);
   console.log(
-    `seeded ${DEMO_PRINCIPALS.length} people, ${PAYMENTS.length} payments, ${refunds} refunds, ${cases} KYC cases`,
+    `seeded ${DEMO_PRINCIPALS.length} people, ${PAYMENTS.length} payments, ${refunds} refunds, ${cases} KYC cases, ${configs} flag configs`,
   );
   console.log(`${events} audit events written by real operations`);
 }

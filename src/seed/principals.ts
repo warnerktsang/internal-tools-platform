@@ -72,6 +72,37 @@ export const DEMO_PRINCIPALS: Principal[] = [
     scopes: {},
   },
   {
+    // Flags scope by environment, so a principal's grant names environments rather than
+    // business units — the same mechanism, a different dimension.
+    id: 'usr-sam',
+    kind: 'human',
+    email: 'sam@example.com',
+    displayName: 'Sam Okafor',
+    title: 'Engineer, Growth',
+    roles: ['engineer'],
+    scopes: { environment: ['development', 'staging'] },
+  },
+  {
+    id: 'usr-rel',
+    kind: 'human',
+    email: 'rel@example.com',
+    displayName: 'Renee Lindqvist',
+    title: 'Release manager',
+    roles: ['release_manager'],
+    scopes: { environment: ['development', 'staging', 'production'] },
+  },
+  {
+    // A second release manager: production ramps above the threshold need someone other
+    // than the person who proposed them.
+    id: 'usr-mira',
+    kind: 'human',
+    email: 'mira@example.com',
+    displayName: 'Mira Kovács',
+    title: 'Release manager, Platform',
+    roles: ['release_manager'],
+    scopes: { environment: ['development', 'staging', 'production'] },
+  },
+  {
     id: 'usr-ava',
     kind: 'human',
     email: 'ava@example.com',
@@ -88,6 +119,15 @@ export const DEMO_SYSTEM_PRINCIPALS: Principal[] = [
     kind: 'system',
     email: null,
     displayName: 'Refund settler (effect worker)',
+    title: 'System',
+    roles: ['system_effects'],
+    scopes: {},
+  },
+  {
+    id: 'sys-flag-publisher',
+    kind: 'system',
+    email: null,
+    displayName: 'Flag publisher (effect worker)',
     title: 'System',
     roles: ['system_effects'],
     scopes: {},

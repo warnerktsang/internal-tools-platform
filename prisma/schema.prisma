@@ -293,9 +293,11 @@ model FlagConfig {
   /// Optimistic concurrency: an approved change is applied only against the version it
   /// was reviewed against.
   version     Int     @default(1)
-  /// 'queued' | 'publishing' | 'published' | 'failed'
-  publishState String @default("published")
-  publishedVersion Int @default(1)
+  /// live | publishing | publish_failed
+  state       String  @default("live")
+  /// Lags `version` while a publish is in flight: what the SDK is actually serving.
+  publishedVersion Int     @default(1)
+  publishError     String?
   updatedAt   DateTime @updatedAt
 
   @@unique([flagId, environment])
