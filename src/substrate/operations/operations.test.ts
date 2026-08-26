@@ -8,8 +8,8 @@ import { db } from '@/substrate/db';
 import { enableAuditBypass } from '@/substrate/audit/bypass';
 import { verifyAuditChain } from '@/substrate/audit';
 import { decide } from '@/substrate/approvals';
-import { registerPort, resetPorts, runEffects } from '@/substrate/effects';
-import { execute } from '@/substrate/operations';
+import { registerPort, resetPorts } from '@/substrate/effects';
+import { execute, type ExecuteOutput } from '@/substrate/operations';
 import { defineResource } from '@/substrate/resource';
 import { invalid, type PortOutcome } from '@/substrate/types';
 import { principal, resetDatabase, seedPrincipal } from '@/test/db';
@@ -160,6 +160,14 @@ async function seedRefund(overrides: Partial<RefundRow> & { id: string }): Promi
 beforeEach(async () => {
   await resetDatabase();
   resetPorts();
+  // The fixture's submit transition declares an effect, and effects now run inside the
+  // operation, so a port has to exist for every test. This default one succeeds and does not
+  // settle, leaving the refund where the transition put it; the effect tests re-register.
+  registerPort({
+    name: 'processor',
+    systemPrincipalId: 'system.processor',
+    operations: { refund: { execute: async () => ({ status: 'succeeded' }) } },
+  });
   await Promise.all([sam, mo, raj, fin2, worker].map(seedPrincipal));
 });
 
@@ -286,7 +294,7 @@ describe('execute', () => {
     expect(await db.effect.count()).toBe(1);
   });
 
-  it('enqueues the declared effect in the same transaction as the write', async () => {
+  it('enqueues the declared effect in the same transaction as the write, then runs it', async () => {
     await seedRefund({ id: 'r1' });
 
     await execute({ resource: refundResource, action: 'submit', recordId: 'r1', principal: sam });
@@ -295,12 +303,27 @@ describe('execute', () => {
     expect(effect).toMatchObject({
       port: 'processor',
       operation: 'refund',
-      state: 'queued',
+      state: 'succeeded',
       idempotencyKey: 'refund:r1',
       recordId: 'r1',
     });
     const write = await db.auditEvent.findFirstOrThrow({ where: { kind: 'write' } });
     expect(effect.requestId).toBe(write.requestId);
+  });
+
+  it('has no effect to run when the write rolled back', async () => {
+    await seedRefund({ id: 'r1', amountMinor: 15_000, state: 'succeeded' });
+    await seedRefund({ id: 'r2', amountMinor: 15_000 });
+
+    const result = await execute({
+      resource: refundResource,
+      action: 'submit',
+      recordId: 'r2',
+      principal: sam,
+    });
+
+    expect(result.status).toBe('invalid');
+    expect(await db.effect.count()).toBe(0);
   });
 });
 
@@ -439,7 +462,7 @@ describe('approvals', () => {
   });
 });
 
-describe('effect worker', () => {
+describe('effects', () => {
   function processorPort(outcomes: PortOutcome[]) {
     const execute_ = vi.fn(
       async (_payload: Record<string, unknown>, _idempotencyKey: string): Promise<PortOutcome> =>
@@ -466,19 +489,18 @@ describe('effect worker', () => {
     return execute_;
   }
 
-  async function submitted(): Promise<void> {
+  async function submitted(): Promise<ExecuteOutput> {
     await seedRefund({ id: 'r1' });
-    await execute({ resource: refundResource, action: 'submit', recordId: 'r1', principal: sam });
+    return execute({ resource: refundResource, action: 'submit', recordId: 'r1', principal: sam });
   }
 
-  it('executes a queued effect and lets the outcome re-enter as a system operation', async () => {
+  it('runs the effect inside the operation and lets the outcome re-enter as a system operation', async () => {
     processorPort([{ status: 'succeeded' }]);
-    await submitted();
 
-    const results = await runEffects();
+    const result = await submitted();
 
-    expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({ outcome: 'succeeded', retrying: false });
+    expect(result).toMatchObject({ status: 'ok' });
+    expect(await db.effect.findFirstOrThrow()).toMatchObject({ state: 'succeeded', attempts: 1 });
     expect(await db.refund.findUniqueOrThrow({ where: { id: 'r1' } })).toMatchObject({
       state: 'succeeded',
     });
@@ -487,13 +509,35 @@ describe('effect worker', () => {
     await expect(verifyAuditChain()).resolves.toMatchObject({ ok: true });
   });
 
-  it('reports an undetermined outcome as unknown rather than failed', async () => {
-    processorPort([{ status: 'unknown', error: 'gateway timeout' }]);
+  it('calls the port after the write has committed, never inside its transaction', async () => {
+    // The port observes committed state, which is only true if the call happens after
+    // commit. If it were inside the operation's transaction this read would see 'draft'.
+    let stateDuringCall: string | null = null;
+    registerPort({
+      name: 'processor',
+      systemPrincipalId: 'system.processor',
+      operations: {
+        refund: {
+          execute: async () => {
+            const row = await db.refund.findUniqueOrThrow({ where: { id: 'r1' } });
+            stateDuringCall = row.state;
+            return { status: 'succeeded' };
+          },
+        },
+      },
+    });
+
     await submitted();
 
-    const [result] = await runEffects();
+    expect(stateDuringCall).toBe('submitted');
+  });
 
-    expect(result.operation).toMatchObject({ status: 'unknown', reason: 'gateway timeout' });
+  it('reports an undetermined outcome to the caller as unknown rather than failed', async () => {
+    processorPort([{ status: 'unknown', error: 'gateway timeout' }]);
+
+    const result = await submitted();
+
+    expect(result).toMatchObject({ status: 'unknown', reason: 'gateway timeout' });
     expect(await db.effect.findFirstOrThrow()).toMatchObject({ state: 'unknown' });
     const refund = await db.refund.findUniqueOrThrow({ where: { id: 'r1' } });
     expect(refund.state).toBe('unknown');
@@ -512,11 +556,9 @@ describe('effect worker', () => {
         },
       },
     });
-    await submitted();
+    const result = await submitted();
 
-    const [result] = await runEffects();
-
-    expect(result.outcome).toBe('unknown');
+    expect(result).toMatchObject({ status: 'unknown' });
   });
 
   it('keeps the effect retryable when domain settlement fails', async () => {
@@ -532,48 +574,38 @@ describe('effect worker', () => {
         },
       },
     });
-    await submitted();
+    const result = await submitted();
 
-    const [result] = await runEffects();
-
-    expect(result).toMatchObject({ outcome: 'succeeded', retrying: true });
+    // The provider acted and the domain could not record it, which is exactly the case the
+    // caller must not be told is fine. The row stays queued for a later sweep.
+    expect(result).toMatchObject({ status: 'unknown' });
     expect(await db.effect.findFirstOrThrow()).toMatchObject({
       state: 'queued',
       lastError: 'database unavailable',
     });
   });
 
-  it('retries a failure with backoff, then gives up', async () => {
+  it('retries a transient failure inline, then records it as failed', async () => {
     const port = processorPort([
       { status: 'failed', error: 'declined' },
       { status: 'failed', error: 'declined' },
       { status: 'failed', error: 'declined' },
       { status: 'failed', error: 'declined' },
     ]);
+
     await submitted();
-    await db.effect.updateMany({ data: { maxAttempts: 2 } });
 
-    const first = await runEffects();
-    expect(first[0]).toMatchObject({ retrying: true });
-    expect(await db.effect.findFirstOrThrow()).toMatchObject({ state: 'queued', attempts: 1 });
-
-    await db.effect.updateMany({ data: { nextAttemptAt: new Date() } });
-    const second = await runEffects();
-
-    expect(second[0]).toMatchObject({ retrying: false, outcome: 'failed' });
-    expect(port).toHaveBeenCalledTimes(2);
-    expect(await db.effect.findFirstOrThrow()).toMatchObject({ state: 'failed', attempts: 2 });
+    expect(port).toHaveBeenCalledTimes(4);
+    expect(await db.effect.findFirstOrThrow()).toMatchObject({ state: 'failed', attempts: 4 });
   });
 
   it('passes a stable idempotency key so a retry cannot double-apply', async () => {
     const port = processorPort([{ status: 'failed', error: 'timeout' }, { status: 'succeeded' }]);
+
     await submitted();
 
-    await runEffects();
-    await db.effect.updateMany({ data: { nextAttemptAt: new Date() } });
-    await runEffects();
-
     expect(port.mock.calls.map((call) => call[1])).toEqual(['refund:r1', 'refund:r1']);
+    expect(await db.effect.findFirstOrThrow()).toMatchObject({ state: 'succeeded' });
   });
 
   it('deduplicates a re-enqueued intent on its idempotency key', async () => {

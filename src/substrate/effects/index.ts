@@ -1,14 +1,20 @@
 /**
- * Transactional outbox and effect worker.
+ * Transactional outbox, drained synchronously.
  *
  * An external call cannot be inside the transaction that commits the domain write, and
  * that single fact generates most of the hard behaviour in refunds: a timeout is not a
  * failure, a retry must not double-charge, and a webhook can arrive twice or early.
  *
  * So: the intent is enqueued in the same transaction as the write (it can never be lost,
- * and it can never happen without a record), executed after commit with an idempotency
+ * and it can never happen without a record), executed *after commit* with an idempotency
  * key, and its outcome re-enters the system as a *new* operation under a system principal
  * — through the same `execute()` path a human uses. There is no side door into domain state.
+ *
+ * The queue is not deferred: `execute()` drains the effect it just enqueued before it
+ * returns, so an action is synchronous from the caller's point of view and there is no
+ * worker to run. Retries happen inline, without backoff, until the outcome is terminal.
+ * A real deployment would move this loop to a cron or queue consumer to survive the
+ * process dying mid-call; the row it claims, and everything below, would not change.
  */
 import { Prisma } from '@prisma/client';
 import { db } from '@/substrate/db';
@@ -117,18 +123,29 @@ function toRow(row: {
 }
 
 /**
- * Claims one queued effect and runs it. `SKIP LOCKED` so several workers can run without
- * two of them executing the same external call.
+ * Claims one queued effect and runs it. `SKIP LOCKED` so two concurrent requests cannot
+ * both execute the same external call.
  */
-async function claim(client: Db): Promise<EffectRow | null> {
+async function claim(client: Db, effectId?: string): Promise<EffectRow | null> {
   const claimed = await client.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM effects
-      WHERE state = 'queued' AND "nextAttemptAt" <= now()
-      ORDER BY "nextAttemptAt" ASC
-      FOR UPDATE SKIP LOCKED
-      LIMIT 1
-    `;
+    const rows =
+      effectId === undefined
+        ? await tx.$queryRaw<{ id: string }[]>`
+            SELECT id FROM effects
+            WHERE state = 'queued' AND "nextAttemptAt" <= now()
+            ORDER BY "nextAttemptAt" ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          `
+        : // A named effect is claimed regardless of its schedule: the caller is waiting on
+          // this one outcome, so a backoff it will never come back to observe is worse than
+          // retrying now.
+          await tx.$queryRaw<{ id: string }[]>`
+            SELECT id FROM effects
+            WHERE id = ${effectId} AND state = 'queued'
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          `;
     if (rows.length === 0) return null;
     return tx.effect.update({
       where: { id: rows[0].id },
@@ -158,7 +175,7 @@ export type EffectResult = {
   retrying: boolean;
 };
 
-async function requeue(effect: EffectRow, lastError: string, client: Db): Promise<void> {
+async function requeue(effect: EffectRow, lastError: string | null, client: Db): Promise<void> {
   await client.effect.update({
     where: { id: effect.id },
     data: {
@@ -228,7 +245,56 @@ async function runOne(effect: EffectRow, client: Db): Promise<EffectResult> {
   };
 }
 
-/** Drains the queue. Called by a route in the prototype; a cron or queue worker in production. */
+/**
+ * Runs one named effect to a terminal outcome, retrying transient failures inline. Called
+ * by `execute()` after the write commits, so the caller observes the settled record.
+ */
+export async function runEffect(
+  effectId: string,
+  options: { client?: Db } = {},
+): Promise<EffectResult | null> {
+  const { client = db } = options;
+  let last: EffectResult | null = null;
+
+  for (;;) {
+    const effect = await claim(client, effectId);
+    if (!effect) return last;
+    try {
+      last = await runOne(effect, client);
+    } catch (error) {
+      // The write is already committed, so a misconfigured port cannot be allowed to throw
+      // out of the operation: the row stays queued and the caller is told it is undetermined.
+      const reason = error instanceof Error ? error.message : String(error);
+      await requeue(effect, reason, client);
+      return {
+        effectId: effect.id,
+        outcome: 'unknown',
+        operation: { status: 'unknown', effectId: effect.id, reason },
+        retrying: false,
+      };
+    }
+    if (!last.retrying) return last;
+    if (effect.attempts >= effect.maxAttempts) {
+      // Out of attempts and still not settled: the row stays queued for whatever sweeps it
+      // later, and the caller is told the outcome is undetermined rather than fine. This is
+      // the settlement-failed case — the provider may well have acted.
+      return {
+        ...last,
+        operation: {
+          status: 'unknown',
+          effectId: effect.id,
+          reason: `the outcome did not settle after ${effect.attempts} attempt(s)`,
+        },
+      };
+    }
+  }
+}
+
+/**
+ * Drains whatever is queued. Nothing in the request path needs this — an effect is run by
+ * the operation that enqueued it — but a row can outlive its request if the process dies
+ * between commit and call, and this is what a cron or queue consumer would invoke.
+ */
 export async function runEffects(
   options: { limit?: number; client?: Db } = {},
 ): Promise<EffectResult[]> {

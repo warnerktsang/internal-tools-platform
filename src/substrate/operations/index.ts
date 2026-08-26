@@ -17,7 +17,7 @@ import { Prisma } from '@prisma/client';
 import { newRequestId, recordDenial, writeAudit } from '@/substrate/audit';
 import { authorize, type PolicyCatalog } from '@/substrate/authz';
 import { db } from '@/substrate/db';
-import { enqueueEffect } from '@/substrate/effects';
+import { enqueueEffect, runEffect } from '@/substrate/effects';
 import { projectForAudit } from '@/substrate/fields';
 import {
   scopeValueOf,
@@ -136,6 +136,7 @@ export async function execute<TRecord extends Record<string, unknown>>(
     return { status: 'denied', reason: decision.reason, rule: decision.rule };
   }
 
+  let queuedEffectId: string | null = null;
   let outcome: ExecuteOutput;
   try {
     outcome = await client.$transaction(async (tx) => {
@@ -185,7 +186,12 @@ export async function execute<TRecord extends Record<string, unknown>>(
 
       const intent = transition.effect?.(ctx);
       if (intent) {
-        await enqueueEffect(tx, intent, { resource: def.name, recordId, requestId });
+        const queued = await enqueueEffect(tx, intent, {
+          resource: def.name,
+          recordId,
+          requestId,
+        });
+        queuedEffectId = queued.deduplicated ? null : queued.effectId;
       }
 
       return { status: 'ok', data: { id: recordId, state: transition.to } };
@@ -195,6 +201,16 @@ export async function execute<TRecord extends Record<string, unknown>>(
       return { status: 'invalid', reason: error.message, field: error.field };
     }
     throw error;
+  }
+
+  // The external call happens here: after commit, so it is never inside a transaction, and
+  // before returning, so the caller sees the settled record rather than an in-flight one.
+  if (queuedEffectId !== null && outcome.status === 'ok') {
+    const effect = await runEffect(queuedEffectId, { client });
+    // An undetermined outcome is the one result the record's own state cannot express to
+    // the caller: the write succeeded and whether it took effect is unknown.
+    const settled = effect?.operation;
+    if (settled?.status === 'unknown') outcome = settled;
   }
 
   if (idempotencyKey && outcome.status !== 'denied') {
