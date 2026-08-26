@@ -147,6 +147,18 @@ describe('creating a refund', () => {
     expect(events[0].action).toBe('create');
   });
 
+  it('snapshots the payment reference and customer name, ignoring what the caller claims', async () => {
+    const result = await draft(1_000, agent, {
+      paymentRef: 'PAY-SOMEONE-ELSE',
+      customerName: 'Not The Customer',
+    });
+    if (result.status !== 'ok') throw new Error(`draft failed: ${JSON.stringify(result)}`);
+
+    const refund = await db.refund.findUniqueOrThrow({ where: { id: result.data.id } });
+    expect(refund.paymentRef).toBe('PAY-50000');
+    expect(refund.customerName).toBe('Test Customer');
+  });
+
   it('holds the cumulative invariant across separate refunds on one payment', async () => {
     const first = await draftAndSubmit(30_000);
     if (first.submitted.status !== 'pending') throw new Error('expected pending');

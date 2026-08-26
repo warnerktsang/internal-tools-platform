@@ -83,10 +83,13 @@ export async function create<TRecord extends Record<string, unknown>>(
   try {
     outcome = await client.$transaction(async (tx) => {
       if (def.creation?.guard) await def.creation.guard({ data, principal, tx });
+      const derived = def.creation?.derive
+        ? await def.creation.derive({ data, principal, tx })
+        : {};
 
       const created = await def
         .delegate(tx)
-        .create({ data: { ...data, state: def.machine.initial } });
+        .create({ data: { ...data, ...derived, state: def.machine.initial } });
 
       await writeAudit(tx, {
         kind: 'write',

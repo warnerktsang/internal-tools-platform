@@ -35,10 +35,11 @@ export function registerRefunds(): void {
     orderBy: { createdAt: 'desc' },
     columns: [
       { field: 'reference', label: 'Refund' },
+      { field: 'customerName', label: 'Customer' },
+      { field: 'paymentRef', label: 'Payment' },
       { field: 'amountMinor', label: 'Amount', format: 'money_minor' },
       { field: 'state', label: 'State', format: 'state' },
       { field: 'reason', label: 'Reason' },
-      { field: 'businessUnitId', label: 'Business unit' },
       { field: 'createdAt', label: 'Requested', format: 'date' },
     ],
   });

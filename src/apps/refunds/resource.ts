@@ -18,6 +18,8 @@ export type RefundRow = {
   id: string;
   reference: string;
   paymentId: string;
+  paymentRef: string | null;
+  customerName: string | null;
   businessUnitId: string;
   amountMinor: number;
   currency: string;
@@ -82,6 +84,13 @@ export const refundResource = defineResource<RefundRow>({
         amountMinor: Number(data.amountMinor),
         currency: String(data.currency ?? 'USD'),
       }),
+    // Who was refunded and against which payment, copied onto the refund at request time:
+    // the list and the audit trail then read on their own, and a later edit to the payment
+    // cannot rewrite what the refund was requested against.
+    derive: async ({ data, tx }) => {
+      const payment = await tx.payment.findUnique({ where: { id: String(data.paymentId) } });
+      return { paymentRef: payment?.reference ?? null, customerName: payment?.customerName ?? null };
+    },
   },
   machine: {
     initial: 'draft',
