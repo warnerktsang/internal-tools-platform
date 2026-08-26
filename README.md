@@ -99,9 +99,9 @@ A local Postgres listens on **5432**, so edit `.env` to
 
 ## Deploy it as a shared staging link
 
-`vercel.json` sets the build command (`prisma migrate deploy && next build`) and an hourly cron,
-so a hosted demo is a managed Postgres plus two environment variables. Roughly ten minutes, no
-code changes.
+`vercel.json` sets the build command (`prisma migrate deploy && next build`) and a daily cron —
+daily because Hobby accounts reject anything more frequent — so a hosted demo is a managed
+Postgres plus two environment variables. Roughly ten minutes, no code changes.
 
 1. **Database.** Create a project in [Neon](https://neon.tech) (or Vercel Postgres) and copy the
    connection string. Take the **direct** (non-pooled) one — Prisma runs interactive transactions
@@ -127,7 +127,7 @@ Vercel Cron's `CRON_SECRET`) is configured and presented as a bearer token or `?
 | Route | What it does |
 | --- | --- |
 | `POST /api/demo/reseed` | Wipes and rebuilds the demo — use it whenever visitors have drifted the shared state. |
-| `GET /api/effects/sweep` | Runs `runEffects()`. Called hourly by the cron in `vercel.json`; recovers outbox rows whose process died between the commit and the provider call. |
+| `GET /api/effects/sweep` | Runs `runEffects()`. Called daily by the cron in `vercel.json`; recovers outbox rows whose process died between the commit and the provider call. |
 
 Two things to know before sharing the link:
 

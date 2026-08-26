@@ -4,7 +4,7 @@
   "crons": [
     {
       "path": "/api/effects/sweep",
-      "schedule": "0 * * * *"
+      "schedule": "0 4 * * *"
     }
   ]
 }
