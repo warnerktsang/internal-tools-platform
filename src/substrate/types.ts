@@ -158,6 +158,14 @@ export type Transition<TRecord = Record<string, unknown>> = {
   /** Name of an approval policy declared on the resource. */
   requiresApproval?: string;
   guard?: Guard<TRecord>;
+  /**
+   * A record-level precondition, for the UI: returns why this principal cannot take the
+   * action on this record right now, or null. Permission and state are already checked, so
+   * this is for rules only the app knows ("you do not hold this case"). Advisory — the
+   * guard inside the transaction is the enforcement, and both should call one function so
+   * the button and the refusal cannot disagree.
+   */
+  availableWhen?: (args: { record: TRecord; principal: Principal }) => string | null;
   /** Extra columns to write alongside the state change. */
   apply?: (ctx: GuardContext<TRecord>) => Record<string, unknown> | Promise<Record<string, unknown>>;
   /** Declares an external effect enqueued in the same transaction as the write. */

@@ -363,4 +363,27 @@ describe('generated screens', () => {
       .map((action) => action.action);
     expect(generated).toEqual(['claim', 'release']);
   });
+
+  it('offers no decision control to an analyst who does not hold the case', async () => {
+    await claim(CASE_ID, nadia);
+    const lea = principal({
+      id: 'usr-lea',
+      roles: ['kyc_analyst'],
+      scopes: { business_unit: ['bu-consumer'] },
+    });
+    await seedPrincipal(lea);
+
+    const view = await detailView(entry(), CASE_ID, lea);
+    if (view.status !== 'ok') throw new Error('a same-unit analyst can read the case');
+
+    // Every action she could click would only be refused, so none is offered — and the
+    // reason shown is the one the guard would have produced.
+    for (const action of view.row.actions) {
+      expect(action.available).toBe(false);
+      expect(action.reason).toBeTruthy();
+    }
+    expect(
+      view.row.actions.find((action) => action.action === 'approve')?.reason,
+    ).toContain(nadia.id);
+  });
 });

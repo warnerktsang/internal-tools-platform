@@ -13,7 +13,7 @@
  */
 import { defineResource } from '@/substrate/resource';
 import { invalid } from '@/substrate/types';
-import type { GuardContext } from '@/substrate/types';
+import type { GuardContext, Principal } from '@/substrate/types';
 
 export type KycCaseRow = {
   id: string;
@@ -40,14 +40,27 @@ const MIN_REASON_LENGTH = 10;
  * Four-eyes at the record level: the queue exists so that one named analyst owns a case.
  * Holding the case is a domain precondition for deciding it, distinct from the permission
  * to decide at all — which is why it is a guard and not a role.
+ *
+ * One function, used twice: `availableWhen` disables the button and `guard` refuses the
+ * write, so the UI cannot offer something the transaction would only reject.
  */
-function assertHeldByDecider({ record, principal }: GuardContext<KycCaseRow>): void {
-  if (record.assigneeId === null) {
-    invalid('claim the case before deciding it', 'assigneeId');
-  }
+function notHeldBy({
+  record,
+  principal,
+}: {
+  record: KycCaseRow;
+  principal: Principal;
+}): string | null {
+  if (record.assigneeId === null) return 'claim the case before deciding it';
   if (record.assigneeId !== principal.id) {
-    invalid(`the case is claimed by ${record.assigneeId}; only they can decide it`, 'assigneeId');
+    return `the case is claimed by ${record.assigneeId}; only they can decide it`;
   }
+  return null;
+}
+
+function assertHeldByDecider(ctx: GuardContext<KycCaseRow>): void {
+  const refusal = notHeldBy(ctx);
+  if (refusal !== null) invalid(refusal, 'assigneeId');
 }
 
 function reasonFrom({ payload }: GuardContext<KycCaseRow>): string {
@@ -98,6 +111,7 @@ export const kycCaseResource = defineResource<KycCaseRow>({
         from: ['in_review'],
         to: 'new',
         permission: 'kyc_case:assign',
+        availableWhen: notHeldBy,
         guard: assertHeldByDecider,
         apply: () => ({ assigneeId: null }),
       },
@@ -106,6 +120,7 @@ export const kycCaseResource = defineResource<KycCaseRow>({
         from: ['in_review'],
         to: 'info_requested',
         permission: 'kyc_case:decide',
+        availableWhen: notHeldBy,
         guard: (ctx) => {
           assertHeldByDecider(ctx);
           reasonFrom(ctx);
@@ -119,6 +134,7 @@ export const kycCaseResource = defineResource<KycCaseRow>({
         to: 'approved',
         permission: 'kyc_case:decide',
         requiresApproval: 'high_risk',
+        availableWhen: notHeldBy,
         guard: async (ctx) => {
           assertHeldByDecider(ctx);
           reasonFrom(ctx);
@@ -136,6 +152,7 @@ export const kycCaseResource = defineResource<KycCaseRow>({
         from: ['in_review'],
         to: 'escalated',
         permission: 'kyc_case:decide',
+        availableWhen: notHeldBy,
         guard: (ctx) => {
           assertHeldByDecider(ctx);
           reasonFrom(ctx);
@@ -149,6 +166,7 @@ export const kycCaseResource = defineResource<KycCaseRow>({
         permission: 'kyc_case:decide',
         // Refusing a customer is never a single analyst's call.
         requiresApproval: 'compliance',
+        availableWhen: notHeldBy,
         guard: (ctx) => {
           assertHeldByDecider(ctx);
           reasonFrom(ctx);

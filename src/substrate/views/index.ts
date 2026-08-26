@@ -114,6 +114,12 @@ export function availableActions(
         reason: `only available while ${transition.from.join(' or ')}`,
       };
     }
+    // Record-level preconditions the app declares ("you do not hold this case"). Advisory
+    // only: the guard inside the transaction is what actually refuses.
+    const unavailable = transition.availableWhen?.({ record, principal }) ?? null;
+    if (unavailable !== null) {
+      return { action: transition.action, available: false, reason: unavailable };
+    }
     return {
       action: transition.action,
       available: true,
