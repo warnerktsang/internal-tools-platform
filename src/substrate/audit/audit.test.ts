@@ -148,6 +148,25 @@ describe('audit chain', () => {
     expect(result.ok === false && result.problem).toBe('broken_link');
   });
 
+  it('keeps the chain intact under concurrent writers', async () => {
+    await Promise.all(
+      Array.from({ length: 8 }, (_, i) =>
+        writeAuditStandalone({
+          kind: 'write',
+          principal: dana,
+          resource: 'kyc_case',
+          recordId: `case-${i}`,
+          action: 'claim',
+          requestId,
+        }),
+      ),
+    );
+
+    const hashes = await db.auditEvent.findMany({ select: { prevHash: true } });
+    expect(new Set(hashes.map((row) => row.prevHash)).size).toBe(8);
+    await expect(verifyAuditChain()).resolves.toEqual({ ok: true, checked: 8 });
+  });
+
   it('verifies across batch boundaries', async () => {
     for (let i = 0; i < 7; i += 1) {
       await writeAuditStandalone({

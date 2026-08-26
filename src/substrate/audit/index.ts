@@ -16,7 +16,13 @@ import { db } from '@/substrate/db';
 import { hashEvent, type HashableEvent } from '@/substrate/audit/hash';
 import type { AuditInput, AuditKind, Db, Principal, Tx } from '@/substrate/types';
 
-/** Serializes chain appends; without it two concurrent writers can share a `prevHash`. */
+/**
+ * Serializes chain appends; without it two concurrent writers can share a `prevHash`.
+ *
+ * Lock ordering matters: callers must take their domain row locks *before* calling this,
+ * never after. The transition layer is the only caller that locks rows, and it does them
+ * in that order; two transactions that disagreed would deadlock.
+ */
 const CHAIN_LOCK = 8_274_100_311n;
 
 export function newRequestId(): string {
