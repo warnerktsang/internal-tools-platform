@@ -28,7 +28,8 @@ export const ROLES: Role[] = [
     permissions: [
       'kyc_case:read',
       'kyc_case:reveal_pii',
-      'kyc_case:approve_decision',
+      // The substrate's approval engine always checks `<resource>:approve`.
+      'kyc_case:approve',
       'audit_event:read',
     ],
   },
@@ -63,6 +64,17 @@ export const ROLES: Role[] = [
     permissions: ['flag_config:read', 'flag_config:update', 'flag_config:rollback'],
   },
   {
+    /**
+     * Effect workers reporting an external outcome back into the domain. They act through
+     * the same operation gateway as a human, so their writes are authorized and audited —
+     * which means they need a role, and a narrow one.
+     */
+    name: 'system_effects',
+    description: 'System principals settling external outcomes.',
+    grant: 'global',
+    permissions: ['refund:settle', 'flag_config:publish'],
+  },
+  {
     name: 'release_manager',
     description: 'Changes and approves feature-flag rollouts, including production.',
     grant: 'own_scope',
@@ -90,7 +102,10 @@ export const DENY_RULES: DenyRule[] = [
   {
     name: 'production_flag_change_requires_release_manager',
     reason: 'Production flag changes are restricted to release managers.',
+    // Scoped to humans: the publish effect writes back as a system principal, and denying
+    // that would strand every approved production change in 'publishing'.
     when: ({ principal, resource, action, record }) =>
+      principal.kind === 'human' &&
       resource === 'flag_config' &&
       action !== 'read' &&
       record?.scopeValue === 'production' &&
