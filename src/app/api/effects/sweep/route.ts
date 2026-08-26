@@ -3,7 +3,8 @@
  *
  * Effects are run by the operation that enqueued them, so nothing in the request path needs
  * this. What needs it is a row whose process died between the commit and the provider call:
- * the intent is durable, but no caller is left to settle it. Vercel Cron hits this route.
+ * the intent is durable, but no caller is left to settle it. Called by hand here; a real
+ * deployment would put a cron or queue consumer on it.
  */
 import { NextResponse } from 'next/server';
 import '@/apps/register';
