@@ -43,6 +43,15 @@ export type CreationPolicy = {
     principal: Principal;
     tx: Tx;
   }) => Promise<void> | void;
+  /**
+   * Fields the record owns rather than the caller: computed in the same transaction as the
+   * insert and merged over the submitted data, so a client cannot supply them.
+   */
+  derive?: (ctx: {
+    data: Record<string, unknown>;
+    principal: Principal;
+    tx: Tx;
+  }) => Promise<Record<string, unknown>> | Record<string, unknown>;
 };
 
 export type ResourceDefinition<TRecord extends Record<string, unknown>> = {

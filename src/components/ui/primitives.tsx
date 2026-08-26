@@ -29,7 +29,7 @@ export function CardBody({ className, ...props }: ComponentProps<'div'>) {
 const BUTTON_VARIANTS = {
   default: 'bg-neutral-900 text-white hover:bg-neutral-700',
   outline: 'border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50',
-  danger: 'bg-red-600 text-white hover:bg-red-500',
+  danger: 'bg-red-700 text-white hover:bg-red-600',
 } as const;
 
 export function Button({

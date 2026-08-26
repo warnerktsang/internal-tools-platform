@@ -230,6 +230,10 @@ model Refund {
   reference      String    @unique
   paymentId      String
   payment        Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  /// Snapshotted from the payment at request time, so a refund reads on its own and an
+  /// audited record does not depend on a join that a later correction could change.
+  paymentRef     String?
+  customerName   String?
   businessUnitId String
   amountMinor    Int
   currency       String    @default("USD")

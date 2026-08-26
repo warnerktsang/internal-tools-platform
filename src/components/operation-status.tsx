@@ -47,7 +47,7 @@ export function OperationBanner({
         {message ? <span className="text-sm text-neutral-800">{message}</span> : null}
       </div>
       <p className="text-xs text-neutral-500">{hint}</p>
-      {reference ? <p className="font-mono text-xs text-neutral-400">{reference}</p> : null}
+      {reference ? <p className="font-mono text-xs text-neutral-500">{reference}</p> : null}
     </div>
   );
 }
