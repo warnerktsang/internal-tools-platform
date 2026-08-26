@@ -6,6 +6,7 @@
  * list, detail and history screens are then derived — there is no per-app CRUD page, which
  * is the whole reason apps 4..n are cheap.
  */
+import type { ComponentType } from 'react';
 import type { ResourceDefinition } from '@/substrate/resource';
 
 export type Column = {
@@ -29,6 +30,12 @@ export type RegisteredResource = {
   orderBy?: Record<string, 'asc' | 'desc'>;
   /** Column shown as the row's title on the detail screen. */
   titleField?: string;
+  /**
+   * The declared escape hatch: an app-specific panel on the detail screen, for the things
+   * generation cannot invent (refunds' request form). Everything around it stays generated,
+   * and the panel still goes through the operation gateway.
+   */
+  detailPanel?: ComponentType<{ recordId: string; data: Record<string, unknown> }>;
 };
 
 const registry = new Map<string, RegisteredResource>();

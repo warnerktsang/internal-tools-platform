@@ -149,6 +149,9 @@ export function RecordDetail({
         </CardBody>
       </Card>
 
+      {entry.detailPanel ? <entry.detailPanel recordId={recordId} data={row.data} /> : null}
+
+      {row.actions.length > 0 ? (
       <Card>
         <CardHeader>
           <CardTitle>Actions</CardTitle>
@@ -159,6 +162,7 @@ export function RecordDetail({
           ))}
         </CardBody>
       </Card>
+      ) : null}
 
       {view.pendingApprovals.length > 0 ? (
         <Card>

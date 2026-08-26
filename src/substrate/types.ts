@@ -225,7 +225,12 @@ export type EffectIntent = {
 
 export type PortOutcome =
   | { status: 'succeeded'; result?: Record<string, unknown> }
-  | { status: 'failed'; error: string }
+  /**
+   * Whether a failure is worth retrying is a property of the error, which only the port
+   * knows: a network 500 is retryable, a declined card is not. Defaults to retryable, so a
+   * port that says nothing gets the safe behaviour.
+   */
+  | { status: 'failed'; error: string; retryable?: boolean }
   /** A timeout is not a failure: the real-world outcome is genuinely undetermined. */
   | { status: 'unknown'; error: string };
 

@@ -201,7 +201,11 @@ async function runOne(effect: EffectRow, client: Db): Promise<EffectResult> {
 
   const error = outcome.status === 'succeeded' ? null : outcome.error;
 
-  if (outcome.status === 'failed' && effect.attempts < effect.maxAttempts) {
+  if (
+    outcome.status === 'failed' &&
+    outcome.retryable !== false &&
+    effect.attempts < effect.maxAttempts
+  ) {
     await requeue(effect, error, client);
     return { effectId: effect.id, outcome: outcome.status, operation: null, retrying: true };
   }

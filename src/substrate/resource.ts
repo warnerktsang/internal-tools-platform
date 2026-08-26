@@ -6,6 +6,7 @@
 import type {
   ApprovalPolicy,
   FieldPolicy,
+  Principal,
   ScopeDimension,
   StateMachine,
   Tx,
@@ -27,6 +28,21 @@ export type RecordDelegate = {
     take?: number;
   }): Promise<Record<string, unknown>[]>;
   count(args: { where?: Record<string, unknown> }): Promise<number>;
+  create(args: { data: Record<string, unknown> }): Promise<Record<string, unknown>>;
+};
+
+/**
+ * Creating a record is an operation too. It has no current state to check and no row to
+ * lock, but it still needs a permission, a guard and an audit row, so it is declared here
+ * rather than left to each app's route handler.
+ */
+export type CreationPolicy = {
+  permission: string;
+  guard?: (ctx: {
+    data: Record<string, unknown>;
+    principal: Principal;
+    tx: Tx;
+  }) => Promise<void> | void;
 };
 
 export type ResourceDefinition<TRecord extends Record<string, unknown>> = {
@@ -42,6 +58,8 @@ export type ResourceDefinition<TRecord extends Record<string, unknown>> = {
   machine: StateMachine<TRecord>;
   /** Referenced by name from `Transition.requiresApproval`. */
   approvals?: Record<string, ApprovalPolicy>;
+  /** Omitted for resources that only ever arrive from outside (KYC cases, payments). */
+  creation?: CreationPolicy;
 };
 
 export function defineResource<TRecord extends Record<string, unknown>>(

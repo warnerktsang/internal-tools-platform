@@ -41,6 +41,7 @@ export const ROLES: Role[] = [
       'kyc_case:read',
       'kyc_case:export',
       'refund:read',
+      'payment:read',
       'flag_config:read',
       'audit_event:read',
     ],
@@ -55,7 +56,15 @@ export const ROLES: Role[] = [
     name: 'finance_manager',
     description: 'Approves refunds above the auto-approval threshold.',
     grant: 'own_scope',
-    permissions: ['refund:read', 'refund:request', 'refund:approve', 'payment:read', 'refund:export'],
+    permissions: [
+      'refund:read',
+      'refund:request',
+      'refund:approve',
+      // Resolving an undetermined processor outcome is a finance decision, not support's.
+      'refund:reconcile',
+      'payment:read',
+      'refund:export',
+    ],
   },
   {
     name: 'engineer',
