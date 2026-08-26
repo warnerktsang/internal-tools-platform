@@ -18,7 +18,7 @@ import { decide } from '@/substrate/approvals';
 import { verifyAuditChain } from '@/substrate/audit';
 import { enableAuditBypass } from '@/substrate/audit/bypass';
 import { db } from '@/substrate/db';
-import { registerPort, resetPorts, runEffects } from '@/substrate/effects';
+import { registerPort, resetPorts } from '@/substrate/effects';
 import { execute } from '@/substrate/operations';
 import { registerResource, resetRegistry } from '@/substrate/registry';
 import { detailView, listView } from '@/substrate/views';
@@ -163,7 +163,6 @@ describe('production is a deny rule, not a role gap', () => {
     // The deny rule is scoped to humans on purpose: denying the effect worker would
     // strand every approved production change in 'publishing'.
     await update(PROD, renee, { rolloutPct: 20 });
-    await runEffects();
 
     const record = await db.flagConfig.findUniqueOrThrow({ where: { id: PROD } });
     expect(record).toMatchObject({ state: 'live', publishedVersion: 2 });
@@ -220,15 +219,15 @@ describe('approval turns on the proposed change', () => {
     if (decision.status !== 'applied') return;
     expect(decision.result.status).toBe('ok');
 
+    // The approval releases the change, which publishes before the decision returns.
     const record = await db.flagConfig.findUniqueOrThrow({ where: { id: PROD } });
-    expect(record).toMatchObject({ rolloutPct: 40, version: 2, state: 'publishing' });
+    expect(record).toMatchObject({ rolloutPct: 40, version: 2, state: 'live' });
   });
 });
 
 describe('the version that was reviewed is the version that ships', () => {
   it('refuses a change written against a stale baseline', async () => {
     await update(STAGING, sam, { rolloutPct: 60 });
-    await runEffects();
 
     const stale = await update(STAGING, sam, { rolloutPct: 80, expectedVersion: 1 });
     expect(stale.status).toBe('invalid');
@@ -290,10 +289,11 @@ describe('a rollout only ramps up', () => {
     expect(record).toMatchObject({ enabled: false, rolloutPct: 0, version: 2 });
   });
 
-  it('rolls back a change that is still publishing', async () => {
+  it('rolls back a change whose publish did not land', async () => {
+    queuePublishOutcomes({ status: 'failed', error: 'service rejected the config', retryable: false });
     await update(STAGING, sam, { rolloutPct: 60 });
     const record = await db.flagConfig.findUniqueOrThrow({ where: { id: STAGING } });
-    expect(record.state).toBe('publishing');
+    expect(record.state).toBe('publish_failed');
 
     const result = await execute({
       resource: flagConfigResource,
@@ -322,12 +322,12 @@ describe('publishing through the outbox', () => {
     // Same requestId: the effect row was written by the transaction that made the change.
     expect(effect.requestId).toBe(write.requestId);
     expect(effect.idempotencyKey).toBe(`flag-publish:${STAGING}:2`);
-    expect(servedConfig(STAGING)).toBeNull();
+    // And the call itself happened after that transaction committed, not inside it.
+    expect(servedConfig(STAGING)).toMatchObject({ version: 2 });
   });
 
   it('goes live only once the service confirms, under the publisher principal', async () => {
     await update(STAGING, sam, { rolloutPct: 60 });
-    await runEffects();
 
     const record = await db.flagConfig.findUniqueOrThrow({ where: { id: STAGING } });
     expect(record).toMatchObject({ state: 'live', version: 2, publishedVersion: 2 });
@@ -342,7 +342,6 @@ describe('publishing through the outbox', () => {
   it('keeps the saved change and says what is actually live when publishing fails', async () => {
     queuePublishOutcomes({ status: 'failed', error: 'service rejected the config', retryable: false });
     await update(STAGING, sam, { rolloutPct: 60 });
-    await runEffects();
 
     const record = await db.flagConfig.findUniqueOrThrow({ where: { id: STAGING } });
     expect(record).toMatchObject({
@@ -358,11 +357,9 @@ describe('publishing through the outbox', () => {
   it('lets a failed publish be fixed forward', async () => {
     queuePublishOutcomes({ status: 'failed', error: 'transient', retryable: false });
     await update(STAGING, sam, { rolloutPct: 60 });
-    await runEffects();
 
     const retry = await update(STAGING, sam, { rolloutPct: 70 });
     expect(retry.status).toBe('ok');
-    await runEffects();
 
     const record = await db.flagConfig.findUniqueOrThrow({ where: { id: STAGING } });
     expect(record).toMatchObject({ state: 'live', rolloutPct: 70, publishedVersion: 3 });
@@ -377,8 +374,6 @@ describe('publishing through the outbox', () => {
       recordId: STAGING,
       principal: renee,
     });
-    // Both publishes now run: the ramp's confirmation is stale, the rollback's is current.
-    await runEffects();
 
     const record = await db.flagConfig.findUniqueOrThrow({ where: { id: STAGING } });
     expect(record).toMatchObject({
@@ -389,17 +384,20 @@ describe('publishing through the outbox', () => {
     });
   });
 
-  it('requeues a transient failure instead of deciding the publish failed', async () => {
-    queuePublishOutcomes({ status: 'failed', error: 'service unavailable', retryable: true });
-    await update(STAGING, sam, { rolloutPct: 60 });
-    await runEffects();
+  it('retries a transient failure instead of deciding the publish failed', async () => {
+    queuePublishOutcomes(
+      { status: 'failed', error: 'service unavailable', retryable: true },
+      { status: 'failed', error: 'service unavailable', retryable: true },
+    );
 
-    // One effect, one attempt, still queued behind its backoff: an unavailable service is
-    // not a rejected config, so the change stays in flight rather than being declared dead.
+    await update(STAGING, sam, { rolloutPct: 60 });
+
+    // An unavailable service is not a rejected config, so the same publish is attempted
+    // again inside the operation rather than the change being declared dead.
     const [effect] = await db.effect.findMany();
-    expect(effect).toMatchObject({ state: 'queued', attempts: 1 });
+    expect(effect).toMatchObject({ state: 'succeeded', attempts: 3 });
     const record = await db.flagConfig.findUniqueOrThrow({ where: { id: STAGING } });
-    expect(record).toMatchObject({ state: 'publishing', publishedVersion: 1 });
+    expect(record).toMatchObject({ state: 'live', publishedVersion: 2 });
   });
 });
 
@@ -418,7 +416,6 @@ describe('what the UI is allowed to offer', () => {
 describe('the trail', () => {
   it('verifies as one chain across a change, an approval and a publish', async () => {
     await update(STAGING, sam, { rolloutPct: 60 });
-    await runEffects();
     const parked = await update(PROD, renee, { rolloutPct: 40 });
     if (parked.status !== 'pending') throw new Error('expected the ramp to park');
     await decide({
@@ -427,7 +424,6 @@ describe('the trail', () => {
       approver: mira,
       decision: 'approved',
     });
-    await runEffects();
 
     expect(await verifyAuditChain()).toMatchObject({ ok: true });
     const actors = await db.auditEvent.findMany({ select: { actorId: true, action: true } });

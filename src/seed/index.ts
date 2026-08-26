@@ -363,7 +363,6 @@ async function seedFlagScenarios(): Promise<void> {
     payload: { enabled: true, rolloutPct: 75, expectedVersion: 1 },
   });
   if (ramp.status !== 'ok') throw new Error(`seed: staging ramp: ${ramp.status}`);
-  await runEffects();
 
   // A production ramp parked on a second release manager: Renee proposed 10% -> 40%, and
   // she cannot approve her own change.
