@@ -15,7 +15,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset --force",
     "db:generate": "prisma generate",
-    "db:seed": "dotenv -e .env -- tsx src/seed/index.ts",
+    "db:seed": "dotenv -e .env -- tsx src/seed/cli.ts",
+    "vercel-build": "prisma migrate deploy && next build",
     "audit:verify": "dotenv -e .env -- tsx src/substrate/audit/verify-cli.ts",
     "postinstall": "prisma generate"
   },

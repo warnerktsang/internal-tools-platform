@@ -67,7 +67,7 @@ the header (see [Who to log in as](#who-to-log-in-as)).
 ### Verification
 
 ```bash
-pnpm test            # 161 tests, run against the real database
+pnpm test            # 165 tests, run against the real database
 pnpm audit:verify    # walks the audit hash chain and reports the first break
 pnpm typecheck && pnpm lint && pnpm build
 ```
@@ -99,41 +99,44 @@ A local Postgres listens on **5432**, so edit `.env` to
 
 ## Deploy it as a shared staging link
 
-Nothing here is Vercel-specific — there is no `vercel.json` and no deploy workflow — but the app
-is a plain Next.js App Router project, so a hosted demo is a managed Postgres plus two dashboard
-settings. Roughly ten minutes, no code changes.
+`vercel.json` sets the build command (`prisma migrate deploy && next build`) and an hourly cron,
+so a hosted demo is a managed Postgres plus two environment variables. Roughly ten minutes, no
+code changes.
 
 1. **Database.** Create a project in [Neon](https://neon.tech) (or Vercel Postgres) and copy the
    connection string. Take the **direct** (non-pooled) one — Prisma runs interactive transactions
    and `migrate deploy`, and demo traffic does not need a pooler.
 2. **Project.** In Vercel, *Add New → Project*, import this repository, and set *Production
    Branch* to the branch you want the link to serve (the stack tip, not `main`, until the PRs are
-   merged). Framework detection and `pnpm install` need no changes; `prisma generate` already runs
-   from `postinstall`.
-3. **Environment.** Add `DATABASE_URL` (all environments). That is the only variable the app
-   reads — the principal switcher is a cookie, not a session secret.
-4. **Migrations.** Override *Settings → Build & Development → Build Command* with
-   `pnpm prisma migrate deploy && pnpm build`, so every deploy brings the schema forward.
-5. **Seed once**, from any machine with the repo checked out:
-   `DATABASE_URL='<the same string>' pnpm db:seed`. The seed writes through real operations, so it
-   also proves the deployed schema and the audit triggers work.
-6. **Deploy**, open the URL and pick a person. Actions settle within the request, so there is
-   nothing to run by hand.
+   merged). Framework detection needs no changes: `vercel.json` supplies the build command and
+   `prisma generate` already runs from `postinstall`.
+3. **Environment.** Add `DATABASE_URL` and `ADMIN_TOKEN` (any long random string) for all
+   environments. Nothing else — the principal switcher is a cookie, not a session secret.
+4. **Deploy.** The build runs the migrations, so the schema is live before the first request.
+5. **Seed once**, by calling the reseed route with the token you just set:
+   `curl -X POST "https://<your-app>.vercel.app/api/demo/reseed?token=$ADMIN_TOKEN"`. It runs the
+   same seed the CLI does — through real operations — so it also proves the deployed schema and
+   audit triggers work. `DATABASE_URL='<the string>' pnpm db:seed` from a local checkout does the
+   same thing.
+6. Open the URL and pick a person. Actions settle within the request, so there is nothing to run
+   by hand.
 
-Three things to know before sharing the link:
+Two operational routes exist for a hosted demo, and both refuse to run unless `ADMIN_TOKEN` (or
+Vercel Cron's `CRON_SECRET`) is configured and presented as a bearer token or `?token=`:
 
-- **External calls happen inside the request.** The outbox row commits with the write, and the
-  operation then drains that one row before returning, so a refund or a publish is synchronous
-  from the UI's point of view. What is missing is a sweep — if the process dies between the commit
-  and the call, the row waits for a `runEffects()` consumer that is not deployed. That is a real
-  gap, not a detail: production would run this loop as Vercel Cron or a queue consumer, against
-  the same rows.
-- **Visitors share one mutable database.** Approvals get consumed and flags get ramped. Reseed
-  with `pnpm db:seed` (it upserts) whenever the demo has drifted.
+| Route | What it does |
+| --- | --- |
+| `POST /api/demo/reseed` | Wipes and rebuilds the demo — use it whenever visitors have drifted the shared state. |
+| `GET /api/effects/sweep` | Runs `runEffects()`. Called hourly by the cron in `vercel.json`; recovers outbox rows whose process died between the commit and the provider call. |
+
+Two things to know before sharing the link:
+
+- **Visitors share one mutable database.** Approvals get consumed and flags get ramped; reseed
+  when the demo has drifted.
 - **Anyone can be anyone.** The switcher is the point, and the data is fake. The identity seam
   refuses to authenticate as a system principal, so a hand-written cookie cannot borrow the
-  permissions the effect workers hold — but there is no authentication here, and there is not
-  meant to be.
+  permissions the system actors hold — but there is no authentication on the app itself, and
+  there is not meant to be. Do not put anything real behind this link.
 
 ---
 

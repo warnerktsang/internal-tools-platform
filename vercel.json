@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm vercel-build",
+  "crons": [
+    {
+      "path": "/api/effects/sweep",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

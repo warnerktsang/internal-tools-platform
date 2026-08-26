@@ -379,29 +379,36 @@ async function seedFlagScenarios(): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
+export type SeedSummary = {
+  people: number;
+  payments: number;
+  refunds: number;
+  kycCases: number;
+  flagConfigs: number;
+  auditEvents: number;
+};
+
+/** Wipes and rebuilds the demo. Callable from the CLI and from the reseed route. */
+export async function seedDemoData(): Promise<SeedSummary> {
   await wipe();
   await insertFixtures();
   await seedRefundScenarios();
   await seedKycScenarios();
   await seedFlagScenarios();
 
-  const [refunds, cases, configs, events] = await Promise.all([
+  const [refunds, kycCases, flagConfigs, auditEvents] = await Promise.all([
     db.refund.count(),
     db.kycCase.count(),
     db.flagConfig.count(),
     db.auditEvent.count(),
   ]);
-  console.log(
-    `seeded ${DEMO_PRINCIPALS.length} people, ${PAYMENTS.length} payments, ${refunds} refunds, ${cases} KYC cases, ${configs} flag configs`,
-  );
-  console.log(`${events} audit events written by real operations`);
-}
 
-main()
-  .then(() => db.$disconnect())
-  .catch(async (error) => {
-    console.error(error);
-    await db.$disconnect();
-    process.exit(1);
-  });
+  return {
+    people: DEMO_PRINCIPALS.length,
+    payments: PAYMENTS.length,
+    refunds,
+    kycCases,
+    flagConfigs,
+    auditEvents,
+  };
+}
