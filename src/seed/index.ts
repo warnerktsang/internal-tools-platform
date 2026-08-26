@@ -15,7 +15,6 @@ import { receiveWebhook } from '@/apps/refunds/processor';
 import { refundResource } from '@/apps/refunds/resource';
 import { enableAuditBypass } from '@/substrate/audit/bypass';
 import { db } from '@/substrate/db';
-import { runEffects } from '@/substrate/effects';
 import { execute } from '@/substrate/operations';
 import { create } from '@/substrate/operations/create';
 import { DEMO_PRINCIPALS, DEMO_SYSTEM_PRINCIPALS } from '@/seed/principals';
@@ -140,7 +139,6 @@ async function seedRefundScenarios(): Promise<void> {
     recordId: settled,
     principal: principal('usr-sofia'),
   });
-  await runEffects();
 
   // 2. Awaiting a finance manager: over the threshold, so Sofia cannot finish it alone.
   const pending = await draftRefund({
@@ -172,7 +170,6 @@ async function seedRefundScenarios(): Promise<void> {
     recordId: undetermined,
     principal: principal('usr-sofia'),
   });
-  await runEffects();
 
   // 4. A hostile webhook the system has already survived: a redelivery of the event that
   //    settled RF-2001, plus one for a refund that does not exist.

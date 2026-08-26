@@ -165,7 +165,6 @@ describe('creating a refund', () => {
 
   it('counts an undetermined refund against the payment, so it cannot be paid twice', async () => {
     const { id } = await draftAndSubmit(9_013);
-    await runEffects();
     const refund = await db.refund.findUniqueOrThrow({ where: { id } });
     expect(refund.state).toBe('unknown');
 
@@ -176,11 +175,11 @@ describe('creating a refund', () => {
 });
 
 describe('approval threshold', () => {
-  it('submits without approval below the threshold', async () => {
+  it('submits without approval below the threshold, settling before it returns', async () => {
     const { id, submitted } = await draftAndSubmit(9_900);
     expect(submitted.status).toBe('ok');
     const refund = await db.refund.findUniqueOrThrow({ where: { id } });
-    expect(refund.state).toBe('submitted');
+    expect(refund.state).toBe('succeeded');
   });
 
   it('parks above the threshold and does not call the processor', async () => {
@@ -216,8 +215,9 @@ describe('approval threshold', () => {
     });
     expect(outcome.status).toBe('applied');
 
+    // The approval releases the operation, which runs the processor call before it returns.
     const refund = await db.refund.findUniqueOrThrow({ where: { id } });
-    expect(refund.state).toBe('submitted');
+    expect(refund.state).toBe('succeeded');
     expect(await db.effect.count()).toBe(1);
   });
 
@@ -255,7 +255,6 @@ describe('approval threshold', () => {
 describe('the processor', () => {
   it('settles a successful refund under the system principal', async () => {
     const { id } = await draftAndSubmit(2_500);
-    await runEffects();
 
     const refund = await db.refund.findUniqueOrThrow({ where: { id } });
     expect(refund.state).toBe('succeeded');
@@ -269,35 +268,36 @@ describe('the processor', () => {
 
   it('records a decline as failed, not as undetermined', async () => {
     const { id } = await draftAndSubmit(2_507);
-    await runEffects();
     const refund = await db.refund.findUniqueOrThrow({ where: { id } });
     expect(refund.state).toBe('failed');
   });
 
-  it('retries a transient failure instead of reporting it as declined', async () => {
-    const { id } = await draftAndSubmit(2_500);
-    queueOutcomes({ status: 'failed', error: 'processor_unavailable' });
+  it('retries a transient failure inline instead of reporting it as declined', async () => {
+    queueOutcomes({ status: 'failed', error: 'processor_unavailable' }, { status: 'succeeded' });
 
-    const [result] = await runEffects();
-    expect(result.retrying).toBe(true);
+    const { id } = await draftAndSubmit(2_500);
+
     const refund = await db.refund.findUniqueOrThrow({ where: { id } });
-    expect(refund.state).toBe('submitted');
+    expect(refund.state).toBe('succeeded');
+    expect(await db.effect.findFirstOrThrow({ where: { recordId: id } })).toMatchObject({
+      state: 'succeeded',
+      attempts: 2,
+    });
   });
 
   it('leaves a timed-out refund undetermined, with the moment recorded', async () => {
-    const { id } = await draftAndSubmit(2_513);
-    await runEffects();
+    const { id, submitted } = await draftAndSubmit(2_513);
+    expect(submitted).toMatchObject({ status: 'unknown' });
     const refund = await db.refund.findUniqueOrThrow({ where: { id } });
     expect(refund.state).toBe('unknown');
     expect(refund.unknownSince).toBeInstanceOf(Date);
   });
 
-  it('does not pay twice when the worker retries', async () => {
-    const { id } = await draftAndSubmit(2_500);
+  it('does not pay twice when the effect is retried after the request ended', async () => {
     queueOutcomes({ status: 'unknown', error: 'connection reset' });
+    const { id } = await draftAndSubmit(2_500);
 
-    await runEffects();
-    // Retry the same effect: the processor sees the same idempotency key.
+    // Replay the same effect through the sweep: the processor sees the same idempotency key.
     await db.effect.updateMany({ where: { recordId: id }, data: { state: 'queued', nextAttemptAt: new Date() } });
     await runEffects();
 
@@ -308,7 +308,6 @@ describe('the processor', () => {
 
   it('reconciles an undetermined refund against what the processor actually did', async () => {
     const { id } = await draftAndSubmit(2_513);
-    await runEffects();
     expect((await db.refund.findUniqueOrThrow({ where: { id } })).state).toBe('unknown');
 
     const reconcile = await execute({
@@ -318,7 +317,6 @@ describe('the processor', () => {
       principal: manager,
     });
     expect(reconcile.status).toBe('ok');
-    await runEffects();
 
     const refund = await db.refund.findUniqueOrThrow({ where: { id } });
     expect(refund.state).toBe('succeeded');
@@ -327,7 +325,6 @@ describe('the processor', () => {
 
   it('does not let a support agent reconcile', async () => {
     const { id } = await draftAndSubmit(2_513);
-    await runEffects();
     const result = await execute({
       resource: refundResource,
       action: 'reconcile',
@@ -340,6 +337,8 @@ describe('the processor', () => {
 
 describe('webhooks', () => {
   it('applies a settlement event once and ignores its redelivery', async () => {
+    // Undetermined, so the webhook is the thing that settles it rather than a late duplicate.
+    queueOutcomes({ status: 'unknown', error: 'connection reset' });
     const { id } = await draftAndSubmit(2_500);
 
     expect(
@@ -396,7 +395,6 @@ describe('audit', () => {
       approver: manager,
       decision: 'approved',
     });
-    await runEffects();
     await receiveWebhook({ externalId: 'evt_final', type: 'refund.succeeded', refundId: id });
 
     const verification = await verifyAuditChain();
