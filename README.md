@@ -6,7 +6,7 @@ approvals for all of them.
 
 ## Try it
 
-### → https://internal-tools-platform-warners-projects-19e96c15.vercel.app
+### → https://internal-tools-platform.vercel.app
 
 Nothing to install. **There is no login screen — pick a person from the *Acting as* dropdown in the
 header first**, or every screen will say no principal is selected. Switching people is the demo:
