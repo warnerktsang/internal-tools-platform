@@ -89,54 +89,26 @@ The third app was the one most likely to break the design — it scopes by envir
 business unit — and needed none. That is the whole claim: app #4 is a few hundred lines of
 declaration.
 
-## Limitations
+<details>
+<summary>Development, and resetting the demo data</summary>
 
-- Authentication is a cookie from a dropdown. Real SSO is a port, not a rewrite, but it is not built.
-- Every third-party provider is a deterministic in-process fake — deliberately adversarial
-  (duplicate webhooks, timeouts, injected publish failures), because a fake that always returns 200
-  deletes the hard part.
-- `invalid` domain refusals are not audited; denials and writes are.
-- `/audit` shows the last 100 events, unfiltered and unpaginated.
-- Setting a staging flag to `66%` fails on purpose, so `publish_failed` is reachable in a demo.
-
-## Running it locally
-
-Only needed to develop or run the tests. Requires Node 20+, pnpm 10+ and Docker (for Postgres).
+Node 20+, pnpm 10+ and Docker (for Postgres):
 
 ```bash
-git clone https://github.com/warnerktsang/internal-tools-platform.git
-cd internal-tools-platform
 cp .env.example .env      # local-only values; no real secrets
 pnpm install
 pnpm db:up                # Postgres 16 on localhost:5433
 pnpm db:migrate:deploy
 pnpm db:seed
 pnpm dev                  # http://localhost:3000
+
+pnpm test                 # 166 tests against the real database (truncates it — reseed afterwards)
+pnpm audit:verify         # walks the audit hash chain
 ```
 
-```bash
-pnpm test            # 166 tests against the real database (truncates it — reseed afterwards)
-pnpm audit:verify    # walks the audit hash chain
-pnpm typecheck && pnpm lint && pnpm build
-```
-
-<details>
-<summary>Hosting your own copy, and resetting the demo data</summary>
-
-`vercel.json` sets the build command to `prisma migrate deploy && next build`, so a deploy is a
-managed Postgres plus two environment variables:
-
-1. Create a [Neon](https://neon.tech) project and copy the **direct** (non-pooled) connection string.
-2. In Vercel, import this repository; `main` is the production branch. Turn *Settings → Deployment
-   Protection → Vercel Authentication* **off** if the link is for other people.
-3. Set `DATABASE_URL` and `ADMIN_TOKEN` (any long random string) for all environments, and deploy.
-   The build runs the migrations, so the schema exists before the first request.
-4. Seed once — this is what creates the data:
-   `curl -X POST "https://<your-app>.vercel.app/api/demo/reseed?token=$ADMIN_TOKEN"`. The same call
-   resets the demo whenever visitors have drifted it.
-
-`GET /api/effects/sweep` (same token) exists to recover an outbox row whose process died between
-the commit and the provider call. Nothing schedules it; a production deployment would put it on a
-cron or a queue consumer.
+`vercel.json` sets the build command to `prisma migrate deploy && next build`, so a hosted copy is a
+managed Postgres plus `DATABASE_URL` and `ADMIN_TOKEN`. The build creates the schema; the data comes
+from `curl -X POST "https://<your-app>.vercel.app/api/demo/reseed?token=$ADMIN_TOKEN"`, which is
+also how the demo is reset once visitors have drifted it.
 
 </details>
