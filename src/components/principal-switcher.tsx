@@ -1,4 +1,5 @@
 import { switchPrincipal } from '@/app/actions';
+import { PrincipalSelect } from '@/components/principal-select';
 import { Badge } from '@/components/ui/primitives';
 import type { Principal } from '@/substrate/types';
 
@@ -21,27 +22,7 @@ export function PrincipalSwitcher({
       <label className="text-xs uppercase tracking-wide text-neutral-500" htmlFor="principalId">
         Acting as
       </label>
-      <select
-        id="principalId"
-        name="principalId"
-        defaultValue={current?.id ?? ''}
-        className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm"
-      >
-        <option value="" disabled>
-          Select a principal
-        </option>
-        {principals.map((principal) => (
-          <option key={principal.id} value={principal.id}>
-            {principal.displayName} — {principal.roles.join(', ') || 'no roles'}
-          </option>
-        ))}
-      </select>
-      <button
-        type="submit"
-        className="rounded-md border border-neutral-300 px-2 py-1 text-sm hover:bg-neutral-50"
-      >
-        Switch
-      </button>
+      <PrincipalSelect principals={principals} current={current} />
       {current ? (
         <span className="ml-2 flex items-center gap-1">
           {Object.entries(current.scopes).map(([dimension, values]) => (
