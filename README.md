@@ -107,9 +107,10 @@ pnpm test                 # 166 tests against the real database (truncates it â€
 pnpm audit:verify         # walks the audit hash chain
 ```
 
-`vercel.json` sets the build command to `prisma migrate deploy && next build`, so a hosted copy is a
-managed Postgres plus `DATABASE_URL` and `ADMIN_TOKEN`. The build creates the schema; the data comes
-from `curl -X POST "https://<your-app>.vercel.app/api/demo/reseed?token=$ADMIN_TOKEN"`, which is
-also how the demo is reset once visitors have drifted it.
+`vercel.json` sets the build command to `prisma migrate deploy && tsx src/seed/cli.ts && next build`,
+so a hosted copy is a managed Postgres plus `DATABASE_URL` and `ADMIN_TOKEN`: every deploy migrates
+and reseeds, which is safe because the seed is the whole dataset. Between deploys,
+`curl -X POST "https://<your-app>.vercel.app/api/demo/reseed?token=$ADMIN_TOKEN"` resets the demo
+once visitors have drifted it.
 
 </details>
