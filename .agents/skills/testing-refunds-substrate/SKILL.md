@@ -109,6 +109,7 @@ doc**, a `reject` already parked awaiting compliance), `kyc-4` KYC-5001 (bu-smb)
   check audit attribution as Ava or Omar.
 
 ## Feature flags (`/r/flag-configs`)
+- One seeded flag, `checkout_v2`, with a config per environment (development / staging / production).
 - Scope dimension is `environment` (not business unit). Principals: `usr-sam` (engineer,
   development+staging), `usr-rel` Renee and `usr-mira` Mira (release_manager, all envs),
   `sys-flag-publisher` (system principal that lands publish outcomes), `usr-ava` (auditor, global read).
