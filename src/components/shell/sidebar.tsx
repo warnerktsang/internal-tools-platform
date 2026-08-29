@@ -66,8 +66,7 @@ export function Sidebar({
           );
         })}
 
-        <SectionLabel>Substrate</SectionLabel>
-        <NavLink href="/audit">
+        <NavLink href="/audit" className="mt-4">
           <FileClock className="h-4 w-4 text-neutral-400" aria-hidden />
           Audit logs
         </NavLink>

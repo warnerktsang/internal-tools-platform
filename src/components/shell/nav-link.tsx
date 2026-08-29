@@ -6,7 +6,15 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 /** Sidebar row: a filled pill when the current path is inside it. */
-export function NavLink({ href, children }: { href: string; children: ReactNode }) {
+export function NavLink({
+  href,
+  children,
+  className,
+}: {
+  href: string;
+  children: ReactNode;
+  className?: string;
+}) {
   const pathname = usePathname();
   const active = href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
@@ -19,6 +27,7 @@ export function NavLink({ href, children }: { href: string; children: ReactNode 
         active
           ? 'bg-neutral-100 font-medium text-neutral-900'
           : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900',
+        className,
       )}
     >
       {children}
