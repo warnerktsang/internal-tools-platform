@@ -22,6 +22,7 @@ export default async function ResourceTypesPage() {
   if (!principal) return <SelectPrincipal />;
 
   const resources = registeredResources();
+  const transitioning = resources.filter((entry) => entry.def.machine.transitions.length > 0);
 
   return (
     <>
@@ -78,7 +79,7 @@ export default async function ResourceTypesPage() {
         </Table>
       </Card>
 
-      {resources.map((entry) => (
+      {transitioning.map((entry) => (
         <Card key={entry.def.name}>
           <CardHeader className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>{entry.def.label} transitions</CardTitle>

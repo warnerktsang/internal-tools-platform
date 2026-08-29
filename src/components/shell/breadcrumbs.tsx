@@ -14,7 +14,10 @@ export function Breadcrumbs({ labels }: { labels: Record<string, string> }) {
 
   const crumbs = segments.map((segment, index) => {
     const href = `/${segments.slice(0, index + 1).join('/')}`;
-    const fallback = segment.length > 16 ? `${segment.slice(0, 14)}…` : segment.replace(/-/g, ' ');
+    // A record id is an identifier, not a phrase: shorten it, but never prettify it into
+    // something that cannot be pasted back into a URL.
+    const raw = index === 2 && segments[0] === 'r' ? segment : segment.replace(/-/g, ' ');
+    const fallback = raw.length > 18 ? `${raw.slice(0, 16)}…` : raw;
     return { href, label: labels[href] ?? fallback };
   });
 

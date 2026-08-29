@@ -18,7 +18,7 @@ import {
   type BadgeTone,
 } from '@/components/ui/primitives';
 import { RowMenu } from '@/components/ui/row-menu';
-import { formatDate, formatMoneyMinor, humanize } from '@/lib/utils';
+import { cn, formatDate, formatMoneyMinor, humanize } from '@/lib/utils';
 import type { Column, RegisteredResource } from '@/substrate/registry';
 import type { AvailableAction, DetailView, HistoryEntry, ListView, ViewRow } from '@/substrate/views';
 
@@ -217,12 +217,13 @@ function FieldRow({
   revealHref: string | null;
   revealed: boolean;
 }) {
+  const empty = value === null || value === undefined;
   return (
     <div className="flex items-baseline gap-4 px-4 py-2.5">
       <div className="w-44 shrink-0 text-sm text-neutral-500">{humanize(field)}</div>
       <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-        <span className={masked ? 'font-mono text-neutral-500' : 'text-neutral-900'}>
-          {value instanceof Date ? formatDate(value) : String(value)}
+        <span className={cn(masked && 'font-mono text-neutral-500', empty ? 'text-neutral-400' : 'text-neutral-900')}>
+          {empty ? '—' : value instanceof Date ? formatDate(value) : String(value)}
         </span>
         {revealHref ? (
           <Link
