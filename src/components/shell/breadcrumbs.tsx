@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 /**
  * Derived from the URL rather than passed down by every page: the routes are generated from
  * the registry, so the trail should be too. `labels` carries the registry's names for the
- * segments a URL cannot spell (a resource path, a platform section).
+ * segments a URL cannot spell, such as a resource path.
  */
 export function Breadcrumbs({ labels }: { labels: Record<string, string> }) {
   const pathname = usePathname();
@@ -21,8 +21,7 @@ export function Breadcrumbs({ labels }: { labels: Record<string, string> }) {
     return { href, label: labels[href] ?? fallback };
   });
 
-  // '/r' is a routing artefact, not a place: /r/refunds/abc reads 'Refunds / abc'. '/platform'
-  // is a real grouping with no page of its own, so it stays in the trail but is not a link.
+  // '/r' is a routing artefact, not a place: /r/refunds/abc reads 'Refunds / abc'.
   const visible = crumbs.filter((crumb) => crumb.href !== '/r');
 
   return (
@@ -35,8 +34,6 @@ export function Breadcrumbs({ labels }: { labels: Record<string, string> }) {
           <span className="text-neutral-300">/</span>
           {index === visible.length - 1 ? (
             <span className="text-neutral-900">{crumb.label}</span>
-          ) : crumb.href === '/platform' ? (
-            <span className="text-neutral-500">{crumb.label}</span>
           ) : (
             <Link href={crumb.href} className="text-neutral-500 hover:text-neutral-900">
               {crumb.label}

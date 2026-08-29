@@ -1,14 +1,4 @@
-import {
-  Boxes,
-  CreditCard,
-  FileClock,
-  Flag,
-  LayoutGrid,
-  ScrollText,
-  ShieldCheck,
-  Table2,
-  Users,
-} from 'lucide-react';
+import { Boxes, CreditCard, FileClock, Flag, LayoutGrid, ShieldCheck, Table2 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { PrincipalSwitcher } from '@/components/principal-switcher';
 import { NavLink } from '@/components/shell/nav-link';
@@ -29,11 +19,7 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
-/**
- * Two halves, deliberately: the apps, and the substrate they are declared against. The
- * second half is the argument — a console that can show you the roles, the resource model
- * and the trail is a platform, not three screens that happen to share a stylesheet.
- */
+/** Nav is derived from the registry: an app appears here by declaring itself, not by editing this file. */
 export function Sidebar({
   resources,
   principal,
@@ -80,19 +66,7 @@ export function Sidebar({
           );
         })}
 
-        <SectionLabel>Platform</SectionLabel>
-        <NavLink href="/platform/roles">
-          <Users className="h-4 w-4 text-neutral-400" aria-hidden />
-          Roles &amp; permissions
-        </NavLink>
-        <NavLink href="/platform/resource-types">
-          <Boxes className="h-4 w-4 text-neutral-400" aria-hidden />
-          Resource types
-        </NavLink>
-        <NavLink href="/platform/policies">
-          <ScrollText className="h-4 w-4 text-neutral-400" aria-hidden />
-          Deny rules
-        </NavLink>
+        <SectionLabel>Substrate</SectionLabel>
         <NavLink href="/audit">
           <FileClock className="h-4 w-4 text-neutral-400" aria-hidden />
           Audit logs

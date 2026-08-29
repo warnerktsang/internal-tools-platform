@@ -1,6 +1,6 @@
-import { ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
 import '@/apps/register';
+import { ModelDiagram } from '@/components/model-diagram';
 import { SelectPrincipal } from '@/components/select-principal';
 import { PageHeader } from '@/components/shell/page-header';
 import { Badge, Card, CardBody, CardHeader, CardTitle } from '@/components/ui/primitives';
@@ -8,15 +8,12 @@ import { DENY_RULES, ROLES } from '@/config/roles';
 import { registeredResources } from '@/substrate/registry';
 import { currentPrincipal } from '@/substrate/session';
 
-function Stat({ label, value, href }: { label: string; value: number; href: string }) {
+function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <Link href={href} className="rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-sm transition-colors hover:border-neutral-300">
+    <div className="rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-sm">
       <div className="text-2xl font-semibold tracking-tight text-neutral-900">{value}</div>
-      <div className="mt-0.5 flex items-center gap-1 text-xs text-neutral-500">
-        {label}
-        <ArrowUpRight className="h-3 w-3" aria-hidden />
-      </div>
-    </Link>
+      <div className="mt-0.5 text-xs text-neutral-500">{label}</div>
+    </div>
   );
 }
 
@@ -47,10 +44,10 @@ export default async function HomePage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-4">
-        <Stat label="Resource types" value={resources.length} href="/platform/resource-types" />
-        <Stat label="Roles" value={ROLES.length} href="/platform/roles" />
-        <Stat label="Permissions" value={permissions.size} href="/platform/roles" />
-        <Stat label="Deny rules" value={DENY_RULES.length} href="/platform/policies" />
+        <Stat label="Resource types" value={resources.length} />
+        <Stat label="Roles" value={ROLES.length} />
+        <Stat label="Permissions" value={permissions.size} />
+        <Stat label="Deny rules" value={DENY_RULES.length} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -77,13 +74,16 @@ export default async function HomePage() {
       </div>
 
       <Card>
-        <CardBody className="text-sm text-neutral-600">
-          Screens, navigation, authorization, masking and history are derived from those{' '}
-          {resources.length} declarations. What each app added is on{' '}
-          <Link href="/platform/resource-types" className="text-accent-700 hover:underline">
-            Resource types
-          </Link>
-          .
+        <CardHeader>
+          <CardTitle>The objects every app is built from</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <ModelDiagram />
+          <p className="text-sm text-neutral-600">
+            Screens, navigation, authorization, masking and history are derived from those{' '}
+            {resources.length} declarations. An app contributes a resource definition; the
+            substrate contributes everything else.
+          </p>
         </CardBody>
       </Card>
     </>
