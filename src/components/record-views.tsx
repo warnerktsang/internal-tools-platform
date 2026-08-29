@@ -1,4 +1,4 @@
-import { Eye, Search } from 'lucide-react';
+import { Eye, Lock, Search } from 'lucide-react';
 import Link from 'next/link';
 import { decideApproval, runAction } from '@/app/actions';
 import { PageHeader, Tabs, type Tab } from '@/components/shell/page-header';
@@ -78,10 +78,8 @@ export function RecordList({
   if (view.status === 'denied') {
     return (
       <>
-        <PageHeader title={entry.nav} tile={false} />
-        <Card>
-          <CardBody className="text-sm text-neutral-600">{view.reason}</CardBody>
-        </Card>
+        <PageHeader title={entry.nav} tile={false} subtitle={entry.app} />
+        <Denied reason={view.reason} />
       </>
     );
   }
@@ -201,6 +199,31 @@ function ActionButton({
         {action.requiresApproval ? ' (needs approval)' : ''}
       </Button>
     </form>
+  );
+}
+
+/**
+ * A refusal is a result, not an error page: it names the rule that produced it, because the
+ * point of the prototype is that authorization is legible.
+ */
+export function Denied({ reason }: { reason: string }) {
+  return (
+    <Card>
+      <CardBody className="flex items-start gap-3 py-6">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600">
+          <Lock className="h-4 w-4" aria-hidden />
+        </span>
+        <div>
+          <div className="text-sm font-semibold text-neutral-900">Access denied</div>
+          <p className="mt-1 text-sm text-neutral-600">{reason}</p>
+          <p className="mt-2 text-xs text-neutral-500">
+            The decision was made on the server; nothing outside this principal&apos;s scope was
+            fetched. Switch principals in the sidebar to see the same screen under different
+            roles.
+          </p>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 

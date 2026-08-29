@@ -1,7 +1,7 @@
-import { AuditTimeline } from '@/components/record-views';
+import { AuditTimeline, Denied } from '@/components/record-views';
 import { SelectPrincipal } from '@/components/select-principal';
 import { PageHeader } from '@/components/shell/page-header';
-import { Badge, Card, CardBody, CardHeader, CardTitle } from '@/components/ui/primitives';
+import { Badge } from '@/components/ui/primitives';
 import { verifyAuditChain } from '@/substrate/audit';
 import { hasPermission } from '@/substrate/authz';
 import { db } from '@/substrate/db';
@@ -13,16 +13,7 @@ export default async function AuditPage() {
   if (!principal) return <SelectPrincipal />;
 
   if (!hasPermission(principal, 'audit_event:read')) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Access denied</CardTitle>
-        </CardHeader>
-        <CardBody className="text-sm text-neutral-600">
-          Reading the audit trail requires <code>audit_event:read</code>.
-        </CardBody>
-      </Card>
-    );
+    return <Denied reason="Reading the audit trail requires audit_event:read." />;
   }
 
   const [events, verification] = await Promise.all([

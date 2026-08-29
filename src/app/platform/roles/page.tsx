@@ -78,7 +78,7 @@ export default async function RolesPage() {
             <tr>
               <Th>Permission</Th>
               {ROLES.map((role) => (
-                <Th key={role.name} className="text-center font-mono normal-case tracking-normal">
+                <Th key={role.name} className="px-2 text-center font-mono text-[10px] normal-case tracking-normal">
                   {role.name}
                 </Th>
               ))}
@@ -91,7 +91,7 @@ export default async function RolesPage() {
                   <IdChip>{permission}</IdChip>
                 </Td>
                 {ROLES.map((role) => (
-                  <Td key={role.name} className="text-center">
+                  <Td key={role.name} className="px-2 text-center">
                     {role.permissions.includes(permission) ? (
                       <span
                         className="inline-block h-1.5 w-1.5 rounded-full bg-accent-600 align-middle"
@@ -109,8 +109,8 @@ export default async function RolesPage() {
           </tbody>
         </Table>
         <CardBody className="text-xs text-neutral-500">
-          A permission is `resource:action`; the same string names the transition&apos;s
-          requirement, the audit row and the deny-rule input.
+          A permission is <code>resource:action</code>; the same string names the
+          transition&apos;s requirement, the audit row and the deny-rule input.
         </CardBody>
       </Card>
     </>
