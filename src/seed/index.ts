@@ -337,19 +337,17 @@ async function seedFlagScenarios(): Promise<void> {
   });
   if (ramp.status !== 'ok') throw new Error(`seed: staging ramp: ${ramp.status}`);
 
-  // A production ramp parked on a second release manager: Renee proposed 10% -> 40%, and
-  // she cannot approve her own change.
+  // A production ramp under the approval threshold, done by the release manager: allowed
+  // outright, where the same edit by Sam would be refused by the deny rule.
   const production = await config('flag-checkout-v2', 'production');
-  const parked = await execute({
+  const ramped = await execute({
     resource: flagConfigResource,
     action: 'update',
     recordId: production,
-    principal: principal('usr-rel'),
-    payload: { enabled: true, rolloutPct: 40, expectedVersion: 1 },
+    principal: principal('usr-omar'),
+    payload: { enabled: true, rolloutPct: 20, expectedVersion: 1 },
   });
-  if (parked.status !== 'pending') {
-    throw new Error(`seed: production ramp should park, got ${parked.status}`);
-  }
+  if (ramped.status !== 'ok') throw new Error(`seed: production ramp: ${ramped.status}`);
 }
 
 export type SeedSummary = {
