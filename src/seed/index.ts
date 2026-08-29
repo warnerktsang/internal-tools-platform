@@ -24,14 +24,6 @@ import type { Principal } from '@/substrate/types';
 
 const PAYMENTS = [
   {
-    id: 'pay-consumer-1',
-    reference: 'PAY-1001',
-    businessUnitId: 'bu-consumer',
-    customerName: 'Marcus Webb',
-    capturedMinor: 24_000,
-    processorRef: 'ch_1001',
-  },
-  {
     id: 'pay-consumer-2',
     reference: 'PAY-1002',
     businessUnitId: 'bu-consumer',
@@ -128,16 +120,6 @@ const FLAGS = [
       { environment: 'development', enabled: true, rolloutPct: 100 },
       { environment: 'staging', enabled: true, rolloutPct: 50 },
       { environment: 'production', enabled: true, rolloutPct: 10 },
-    ],
-  },
-  {
-    id: 'flag-instant-payouts',
-    key: 'instant_payouts',
-    description: 'Instant payouts for verified merchants. Off in production.',
-    ownerId: 'usr-rel',
-    configs: [
-      { environment: 'development', enabled: true, rolloutPct: 100 },
-      { environment: 'production', enabled: false, rolloutPct: 0 },
     ],
   },
 ];
@@ -269,7 +251,7 @@ async function seedRefundScenarios(): Promise<void> {
   //    'unknown' for a finance manager to reconcile.
   const undetermined = await draftRefund({
     requester: 'usr-sofia',
-    paymentId: 'pay-consumer-1',
+    paymentId: 'pay-consumer-3',
     reference: 'RF-2003',
     amountMinor: 4_013,
     reason: 'partial goodwill credit',
@@ -294,15 +276,6 @@ async function seedRefundScenarios(): Promise<void> {
     type: 'refund.succeeded',
     refundId: settled,
     processorRef: 'pi_RF-2001',
-  });
-
-  // 5. A draft in the other business unit, so cross-scope denial is one click away.
-  await draftRefund({
-    requester: 'usr-dan',
-    paymentId: 'pay-smb-1',
-    reference: 'RF-3001',
-    amountMinor: 45_000,
-    reason: 'contract cancelled mid-term',
   });
 }
 
@@ -364,19 +337,17 @@ async function seedFlagScenarios(): Promise<void> {
   });
   if (ramp.status !== 'ok') throw new Error(`seed: staging ramp: ${ramp.status}`);
 
-  // A production ramp parked on a second release manager: Renee proposed 10% -> 40%, and
-  // she cannot approve her own change.
+  // A production ramp under the approval threshold, done by the release manager: allowed
+  // outright, where the same edit by Sam would be refused by the deny rule.
   const production = await config('flag-checkout-v2', 'production');
-  const parked = await execute({
+  const ramped = await execute({
     resource: flagConfigResource,
     action: 'update',
     recordId: production,
-    principal: principal('usr-rel'),
-    payload: { enabled: true, rolloutPct: 40, expectedVersion: 1 },
+    principal: principal('usr-omar'),
+    payload: { enabled: true, rolloutPct: 20, expectedVersion: 1 },
   });
-  if (parked.status !== 'pending') {
-    throw new Error(`seed: production ramp should park, got ${parked.status}`);
-  }
+  if (ramped.status !== 'ok') throw new Error(`seed: production ramp: ${ramped.status}`);
 }
 
 export type SeedSummary = {

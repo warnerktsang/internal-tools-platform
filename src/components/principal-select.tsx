@@ -5,6 +5,9 @@ import type { Principal } from '@/substrate/types';
 /**
  * Submits on change so acting as someone else is one interaction. Without JavaScript the
  * enclosing form still posts, so the switcher degrades to a plain select plus Enter.
+ *
+ * Rendered transparently over the switcher card: the native select keeps the keyboard and
+ * mobile behaviour, the card underneath carries the styling.
  */
 export function PrincipalSelect({
   principals,
@@ -17,9 +20,10 @@ export function PrincipalSelect({
     <select
       id="principalId"
       name="principalId"
+      aria-label="Acting as"
       defaultValue={current?.id ?? ''}
       onChange={(event) => event.currentTarget.form?.requestSubmit()}
-      className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm"
+      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
     >
       <option value="" disabled>
         Select a principal

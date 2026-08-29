@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import '@/apps/register';
 import { SelectPrincipal } from '@/components/select-principal';
+import { PageHeader } from '@/components/shell/page-header';
 import { Badge, Card, CardBody, CardHeader, CardTitle } from '@/components/ui/primitives';
 import { registeredResources } from '@/substrate/registry';
 import { currentPrincipal } from '@/substrate/session';
@@ -18,25 +19,17 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Acting as {principal.displayName}</CardTitle>
-        </CardHeader>
-        <CardBody className="space-y-2 text-sm">
-          <div className="flex flex-wrap gap-1">
-            {principal.roles.map((role) => (
-              <Badge key={role} tone="blue">
-                {role}
-              </Badge>
-            ))}
-          </div>
-          <p className="text-neutral-600">
-            {resources.length} registered resource{resources.length === 1 ? '' : 's'}. Screens,
-            navigation, authorization, masking and history are derived from those declarations.
-          </p>
-        </CardBody>
-      </Card>
+    <>
+      <PageHeader
+        title={principal.displayName}
+        tile
+        subtitle={principal.title ?? principal.email ?? 'Acting as this principal'}
+        meta={principal.roles.map((role) => (
+          <Badge key={role} tone="blue">
+            {role}
+          </Badge>
+        ))}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
         {[...apps].map(([app, entries]) => (
@@ -47,7 +40,7 @@ export default async function HomePage() {
             <CardBody className="space-y-3 text-sm">
               {entries.map((entry) => (
                 <div key={entry.path}>
-                  <Link href={`/r/${entry.path}`} className="underline">
+                  <Link href={`/r/${entry.path}`} className="font-medium text-accent-700 hover:underline">
                     {entry.nav}
                   </Link>
                   <p className="mt-1 text-xs text-neutral-500">
@@ -60,16 +53,6 @@ export default async function HomePage() {
           </Card>
         ))}
       </div>
-
-      {resources.length === 0 ? (
-        <Card>
-          <CardBody className="text-sm text-neutral-600">
-            No resources registered yet — the three tools declare themselves in the PRs after this
-            one. The shell, switcher, generated screens and audit view are already wired to whatever
-            registers.
-          </CardBody>
-        </Card>
-      ) : null}
-    </div>
+    </>
   );
 }

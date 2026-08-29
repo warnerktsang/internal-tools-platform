@@ -18,14 +18,17 @@ After any machine/container restart, re-run `db:seed` — record IDs are cuids a
 so never hardcode refund IDs; get them from the list pages (`/r/refunds`, `/r/payments`).
 
 ## Acting as different people
-There is no login. The header has an "Acting as" `<select>` + **Switch** button that sets a signed
-cookie. A fresh browser profile shows "No principal selected" — pick someone first.
-Seeded principals: Sofia Ramos (support_agent, bu-consumer), Dan Whitfield (support_agent, bu-smb),
-Priya Nair (finance_manager, bu-consumer — the only eligible refund approver), Ava Chen (auditor, global
-read), Nadia Haddad (kyc_analyst, bu-consumer), Lea Fontaine (kyc_analyst, bu-consumer — second
-same-BU analyst, use her for holder-exclusivity tests), Raj Patel (kyc_analyst, bu-smb), Omar Diallo
-(compliance_officer, global — the KYC approver). System principal `sys-refund-settler` performs outbox
-effects.
+There is no login. The sidebar has an "Acting as" context switcher (a `<select>` that submits on
+change) which sets a signed cookie. A fresh browser profile shows "No principal selected" — pick
+someone first.
+Seeded principals: Sofia Ramos (support_agent, bu-consumer), Nadia Haddad (kyc_analyst,
+bu-consumer), Sam Okafor (engineer, development+staging), Omar Diallo (compliance_officer +
+finance_manager + release_manager — the second signer for every flow, and the only principal who
+may change production flags), Ava Chen (auditor, global read). System principals
+`sys-refund-settler` and `sys-flag-publisher` perform outbox effects.
+Because Omar is the only release_manager, a production ramp above 25% parks and can never be
+approved — that is a property of the small demo cast, not a bug. Countersigning is demoable in
+refunds (Sofia → Omar) and KYC (Nadia → Omar).
 
 ## Reaching each behaviour through the UI
 - Draft a refund: payment detail (`/r/payments/<id>`) → "Request a refund" panel (Amount, Reason,
@@ -38,7 +41,7 @@ effects.
   state `unknown` (reconcilable, truth is "succeeded"); ending in `07` → hard decline → state `failed`;
   anything else → `succeeded`. So $40.13 and $40.07 are the cheap ways to exercise unknown vs failed.
 - `reconcile` is only enabled while state is `unknown` and only for `finance_manager`.
-- Scope isolation: as Sofia, `/r/payments/pay-smb-1` renders an "Access denied" card; list headers show
+- Scope isolation: as Sofia, `/r/payments/pay-smb-1` (or `/r/kyc-cases/kyc-4`, both bu-smb) renders an "Access denied" card; list headers show
   "N visible · scoped to business_unit …" and N must equal the rendered row count.
 - Audit: `/audit` (any principal, meaningful as Ava) shows a "verified · N events" hash-chain badge plus
   every write/decision/auth_denied event.
@@ -55,8 +58,8 @@ The single `OperationBanner` reads `?status=<ok|pending|denied|invalid|unknown>&
 
 ### Producing a real `denied` banner without devtools/curl
 Ineligible actions are correctly hidden or disabled, so the honest way to hit the server's denial path
-is a stale tab: open the record in tab 1 while acting as a principal who *may* act (e.g. Priya with
-`reconcile` enabled, or Priya with Approve on a pending request), switch the principal to someone
+is a stale tab: open the record in tab 1 while acting as a principal who *may* act (e.g. Omar with
+`reconcile` enabled, or Omar with Approve on a pending request), switch the principal to someone
 ineligible in tab 2, then submit the still-rendered form in tab 1. Expect a red **Denied** badge, the
 hint "You do not hold the authority for this action.", an unchanged record, and an `auth_denied` row in
 History and `/audit`. Note Chrome may restore the old "Acting as" `<select>` value on the stale tab —
@@ -89,7 +92,7 @@ doc**, a `reject` already parked awaiting compliance), `kyc-4` KYC-5001 (bu-smb)
   `kyc_case:decide`, so Omar can only act through the "Awaiting approval" card — his panel buttons are
   correctly disabled. On approval the case applies **the requester's** reason, not the approver's note.
 - Holder exclusivity: a claimed case can only be decided by its assignee. To test, claim as Nadia then
-  act as Lea (same bu-consumer, so she can read the case with PII masked). Any decide action returns a
+  act as Omar (global read, so he can read the case with PII masked). Any decide action returns a
   slate **Invalid** banner `the case is claimed by usr-nadia; only they can decide it` — `invalid`
   (domain), deliberately not `denied` (authority). `release` behaves the same way. `claim` is refused
   differently: it is state-based, so the generated button renders *disabled* with the title
@@ -108,11 +111,12 @@ doc**, a `reject` already parked awaiting compliance), `kyc-4` KYC-5001 (bu-smb)
   check audit attribution as Ava or Omar.
 
 ## Feature flags (`/r/flag-configs`)
+- One seeded flag, `checkout_v2`, with a config per environment (development / staging / production).
 - Scope dimension is `environment` (not business unit). Principals: `usr-sam` (engineer,
-  development+staging), `usr-rel` Renee and `usr-mira` Mira (release_manager, all envs),
-  `sys-flag-publisher` (system principal that lands publish outcomes), `usr-ava` (auditor, global read).
+  development+staging), `usr-omar` (release_manager, all envs), `sys-flag-publisher` (system
+  principal that lands publish outcomes), `usr-ava` (auditor, global read).
 - Config ids are cuids, so never guess a URL: open the list and copy the id from the row's `Open` link.
-  For the cross-scope denial test, copy the production id while acting as Renee, then switch to Sam and
+  For the cross-scope denial test, copy the production id while acting as Omar, then switch to Sam and
   paste it — expect "Access denied … outside your environment scope (production)" plus an `auth_denied`
   row in `/audit`.
 - Update happens through the `RolloutPanel` form (`enabled`, `rollout %`, hidden `expectedVersion`);
@@ -134,8 +138,8 @@ doc**, a `reject` already parked awaiting compliance), `kyc-4` KYC-5001 (bu-smb)
 - Production ramps **above 25%** park as amber `Awaiting approval · policy: production_rollout` and
   require a *different* release manager; the requester sees the card with
   `you cannot decide this: you requested this change; a different person must approve it` and no
-  buttons. Rollback needs no approval at all. The seed leaves one such pending ramp (Renee 10%→40%)
-  ready for Mira to approve.
+  buttons. Rollback needs no approval at all. With one release manager seeded, such a ramp stays
+  pending forever; the seed instead leaves a completed sub-threshold production ramp by Omar.
 - Known gaps seen in testing (might still be open): `invalid` guard refusals write no audit row, and a
   red **Denied** operation banner is not reachable in this app because scope failures short-circuit at
   read time into the Access denied page.

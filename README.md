@@ -9,19 +9,20 @@ approvals for all of them.
 ### → https://internal-tools-platform.vercel.app
 
 Nothing to install. **There is no login screen — pick a person from the *Acting as* dropdown in the
-header first**, or every screen will say no principal is selected. Switching people is the demo:
+sidebar first**, or every screen will say no principal is selected. Switching people is the demo:
 no policy here can be satisfied by one person acting alone.
 
 | Person | Role | Sees |
 |---|---|---|
 | Sofia | support agent | Consumer payments and refunds |
-| Priya | finance manager | approves refunds over $100 |
-| Nadia, Lea | KYC analysts | Consumer cases |
-| Raj | KYC analyst | SMB cases only |
-| Omar | compliance officer | approves KYC rejections |
+| Nadia | KYC analyst | Consumer cases |
 | Sam | engineer | flags in `development` / `staging` |
-| Renee, Mira | release managers | flags including `production` |
+| Omar | compliance officer, finance manager, release manager | the second signer for all three apps, and the only person who may touch `production` flags |
 | Ava | auditor | read-only, plus `/audit` |
+
+Omar wearing three hats keeps the cast small; a real deployment would spread those roles across
+people. It changes nothing about the policy, because separation of duties is checked per request —
+he still cannot approve a refund or a rejection he asked for himself.
 
 The data is fake, the third-party providers are in-process fakes, and every visitor shares one
 mutable database — approvals get consumed and flags get ramped as people click.
@@ -39,10 +40,10 @@ captured — checked under a row lock, so two concurrent requests for 60% cannot
 parks for a finance manager. When the processor times out the refund goes to `unknown`, not
 `failed`: the system refuses to claim the customer was paid.
 
-**Feature-flag admin.** Rollout percentages per environment. Production changes need a second
-release manager, a stale editor loses to optimistic concurrency, and a rollout only ramps *up* —
-ramping down is a `rollback`, which needs no approval, because requiring sign-off to stop an
-incident makes outages longer.
+**Feature-flag admin.** Rollout percentages per environment. Production changes are restricted to
+release managers and a big ramp needs a second one, a stale editor loses to optimistic
+concurrency, and a rollout only ramps *up* — ramping down is a `rollback`, which needs no
+approval, because requiring sign-off to stop an incident makes outages longer.
 
 Then open **`/audit`**: one hash-chained trail across all three apps, covering reads, denials,
 decisions and approvals.
@@ -106,9 +107,10 @@ pnpm test                 # 166 tests against the real database (truncates it �
 pnpm audit:verify         # walks the audit hash chain
 ```
 
-`vercel.json` sets the build command to `prisma migrate deploy && next build`, so a hosted copy is a
-managed Postgres plus `DATABASE_URL` and `ADMIN_TOKEN`. The build creates the schema; the data comes
-from `curl -X POST "https://<your-app>.vercel.app/api/demo/reseed?token=$ADMIN_TOKEN"`, which is
-also how the demo is reset once visitors have drifted it.
+`vercel.json` sets the build command to `prisma migrate deploy && tsx src/seed/cli.ts && next build`,
+so a hosted copy is a managed Postgres plus `DATABASE_URL` and `ADMIN_TOKEN`: every deploy migrates
+and reseeds, which is safe because the seed is the whole dataset. Between deploys,
+`curl -X POST "https://<your-app>.vercel.app/api/demo/reseed?token=$ADMIN_TOKEN"` resets the demo
+once visitors have drifted it.
 
 </details>

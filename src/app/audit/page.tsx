@@ -1,6 +1,7 @@
-import { AuditTimeline } from '@/components/record-views';
+import { AuditTimeline, Denied } from '@/components/record-views';
 import { SelectPrincipal } from '@/components/select-principal';
-import { Badge, Card, CardBody, CardHeader, CardTitle } from '@/components/ui/primitives';
+import { PageHeader } from '@/components/shell/page-header';
+import { Badge } from '@/components/ui/primitives';
 import { verifyAuditChain } from '@/substrate/audit';
 import { hasPermission } from '@/substrate/authz';
 import { db } from '@/substrate/db';
@@ -12,16 +13,7 @@ export default async function AuditPage() {
   if (!principal) return <SelectPrincipal />;
 
   if (!hasPermission(principal, 'audit_event:read')) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Access denied</CardTitle>
-        </CardHeader>
-        <CardBody className="text-sm text-neutral-600">
-          Reading the audit trail requires <code>audit_event:read</code>.
-        </CardBody>
-      </Card>
-    );
+    return <Denied reason="Reading the audit trail requires audit_event:read." />;
   }
 
   const [events, verification] = await Promise.all([
@@ -45,22 +37,20 @@ export default async function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex items-center justify-between">
-          <CardTitle>Hash chain</CardTitle>
-          {verification.ok ? (
-            <Badge tone="green">verified · {verification.checked} events</Badge>
+      <PageHeader
+        title="Audit logs"
+        tile={false}
+        subtitle="One trail for every app, written in the same transaction as the change it records"
+        meta={
+          verification.ok ? (
+            <Badge tone="green">hash chain verified · {verification.checked} events</Badge>
           ) : (
             <Badge tone="red">
               {verification.problem} at seq {verification.brokenAtSeq}
             </Badge>
-          )}
-        </CardHeader>
-        <CardBody className="text-xs text-neutral-500">
-          Each event hashes its predecessor, so an edited or deleted row is detectable rather than
-          merely discouraged.
-        </CardBody>
-      </Card>
+          )
+        }
+      />
 
       <AuditTimeline
         entries={events.map(({ createdAt, seq, resource, ...event }) => ({

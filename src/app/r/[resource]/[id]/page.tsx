@@ -1,9 +1,8 @@
 import { notFound } from 'next/navigation';
 import '@/apps/register';
 import { OperationBanner } from '@/components/operation-status';
-import { RecordDetail } from '@/components/record-views';
+import { Denied, RecordDetail } from '@/components/record-views';
 import { SelectPrincipal } from '@/components/select-principal';
-import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/primitives';
 import { resourceByPath } from '@/substrate/registry';
 import { currentPrincipal } from '@/substrate/session';
 import type { OperationStatus } from '@/substrate/types';
@@ -44,16 +43,15 @@ export default async function ResourceDetailPage({
       {status ? <OperationBanner status={status} message={message} reference={reference} /> : null}
 
       {view.status === 'denied' ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Access denied</CardTitle>
-          </CardHeader>
-          <CardBody className="text-sm text-neutral-600">
-            {view.reason}. The attempt was recorded in the audit trail.
-          </CardBody>
-        </Card>
+        <Denied reason={`${view.reason}. The attempt was recorded in the audit trail.`} />
       ) : (
-        <RecordDetail entry={entry} recordId={id} view={view} revealed={reveal} />
+        <RecordDetail
+          entry={entry}
+          recordId={id}
+          view={view}
+          revealed={reveal}
+          tab={typeof query.tab === 'string' ? query.tab : 'details'}
+        />
       )}
     </div>
   );

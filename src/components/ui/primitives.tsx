@@ -2,7 +2,7 @@
  * shadcn/ui-style primitives, copied in rather than depended on. Deliberately the smallest
  * set the three apps need — the load-bearing components are the substrate ones next door.
  */
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export function Card({ className, ...props }: ComponentProps<'div'>) {
@@ -27,8 +27,9 @@ export function CardBody({ className, ...props }: ComponentProps<'div'>) {
 }
 
 const BUTTON_VARIANTS = {
-  default: 'bg-neutral-900 text-white hover:bg-neutral-700',
+  default: 'bg-accent-600 text-white hover:bg-accent-700',
   outline: 'border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50',
+  ghost: 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900',
   danger: 'bg-red-700 text-white hover:bg-red-600',
 } as const;
 
@@ -70,6 +71,50 @@ export function Badge({
       className={cn(
         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
         BADGE_TONES[tone],
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function Input({ className, ...props }: ComponentProps<'input'>) {
+  return (
+    <input
+      className={cn(
+        'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-100',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+const DOT_TONES = {
+  neutral: 'bg-neutral-400',
+  green: 'bg-emerald-500',
+  amber: 'bg-amber-500',
+  red: 'bg-red-500',
+  blue: 'bg-blue-500',
+  slate: 'bg-slate-400',
+} as const;
+
+/** WorkOS-style status: a coloured dot beside plain text, rather than a filled pill. */
+export function StatusDot({ tone = 'neutral', children }: { tone?: BadgeTone; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-neutral-700">
+      <span className={cn('h-1.5 w-1.5 rounded-full', DOT_TONES[tone])} />
+      {children}
+    </span>
+  );
+}
+
+/** The monospace identifier chip WorkOS puts next to an entity's name. */
+export function IdChip({ className, ...props }: ComponentProps<'span'>) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-md border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 font-mono text-xs text-neutral-600',
         className,
       )}
       {...props}
