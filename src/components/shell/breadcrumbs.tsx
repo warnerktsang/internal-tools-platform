@@ -1,0 +1,46 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
+/**
+ * Derived from the URL rather than passed down by every page: the routes are generated from
+ * the registry, so the trail should be too. `labels` carries the registry's names for the
+ * segments a URL cannot spell (a resource path, a platform section).
+ */
+export function Breadcrumbs({ labels }: { labels: Record<string, string> }) {
+  const pathname = usePathname();
+  const segments = pathname.split('/').filter(Boolean);
+
+  const crumbs = segments.map((segment, index) => {
+    const href = `/${segments.slice(0, index + 1).join('/')}`;
+    const fallback = segment.length > 16 ? `${segment.slice(0, 14)}…` : segment.replace(/-/g, ' ');
+    return { href, label: labels[href] ?? fallback };
+  });
+
+  // '/r' is a routing artefact, not a place: /r/refunds/abc reads 'Refunds / abc'. '/platform'
+  // is a real grouping with no page of its own, so it stays in the trail but is not a link.
+  const visible = crumbs.filter((crumb) => crumb.href !== '/r');
+
+  return (
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm">
+      <Link href="/" className="text-neutral-500 hover:text-neutral-900">
+        Overview
+      </Link>
+      {visible.map((crumb, index) => (
+        <span key={crumb.href} className="flex items-center gap-1.5">
+          <span className="text-neutral-300">/</span>
+          {index === visible.length - 1 ? (
+            <span className="text-neutral-900">{crumb.label}</span>
+          ) : crumb.href === '/platform' ? (
+            <span className="text-neutral-500">{crumb.label}</span>
+          ) : (
+            <Link href={crumb.href} className="text-neutral-500 hover:text-neutral-900">
+              {crumb.label}
+            </Link>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
+}

@@ -53,7 +53,13 @@ export default async function ResourceDetailPage({
           </CardBody>
         </Card>
       ) : (
-        <RecordDetail entry={entry} recordId={id} view={view} revealed={reveal} />
+        <RecordDetail
+          entry={entry}
+          recordId={id}
+          view={view}
+          revealed={reveal}
+          tab={typeof query.tab === 'string' ? query.tab : 'details'}
+        />
       )}
     </div>
   );

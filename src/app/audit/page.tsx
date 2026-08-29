@@ -1,5 +1,6 @@
 import { AuditTimeline } from '@/components/record-views';
 import { SelectPrincipal } from '@/components/select-principal';
+import { PageHeader } from '@/components/shell/page-header';
 import { Badge, Card, CardBody, CardHeader, CardTitle } from '@/components/ui/primitives';
 import { verifyAuditChain } from '@/substrate/audit';
 import { hasPermission } from '@/substrate/authz';
@@ -45,22 +46,20 @@ export default async function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex items-center justify-between">
-          <CardTitle>Hash chain</CardTitle>
-          {verification.ok ? (
-            <Badge tone="green">verified · {verification.checked} events</Badge>
+      <PageHeader
+        title="Audit logs"
+        tile={false}
+        subtitle="One trail for every app, written in the same transaction as the change it records"
+        meta={
+          verification.ok ? (
+            <Badge tone="green">hash chain verified · {verification.checked} events</Badge>
           ) : (
             <Badge tone="red">
               {verification.problem} at seq {verification.brokenAtSeq}
             </Badge>
-          )}
-        </CardHeader>
-        <CardBody className="text-xs text-neutral-500">
-          Each event hashes its predecessor, so an edited or deleted row is detectable rather than
-          merely discouraged.
-        </CardBody>
-      </Card>
+          )
+        }
+      />
 
       <AuditTimeline
         entries={events.map(({ createdAt, seq, resource, ...event }) => ({

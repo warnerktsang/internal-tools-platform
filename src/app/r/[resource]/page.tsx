@@ -8,15 +8,23 @@ import { SelectPrincipal } from '@/components/select-principal';
 
 export default async function ResourceListPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ resource: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { resource } = await params;
+  const [{ resource }, query] = await Promise.all([params, searchParams]);
   const entry = resourceByPath(resource);
   if (!entry) notFound();
 
   const principal = await currentPrincipal();
   if (!principal) return <SelectPrincipal />;
 
-  return <RecordList entry={entry} view={await listView(entry, principal)} />;
+  return (
+    <RecordList
+      entry={entry}
+      view={await listView(entry, principal)}
+      query={typeof query.q === 'string' ? query.q : ''}
+    />
+  );
 }

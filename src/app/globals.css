@@ -10,6 +10,13 @@
  * 4.5:1 on white, since that is what labels, timestamps and masked values are written in.
  */
 @theme {
+  --color-accent-50: #eef0ff;
+  --color-accent-100: #e2e5ff;
+  --color-accent-200: #cdd2fe;
+  --color-accent-500: #6363f1;
+  --color-accent-600: #5555e3;
+  --color-accent-700: #4646c2;
+
   --color-neutral-50: #f2f4f7;
   --color-neutral-100: #e9ecf1;
   --color-neutral-200: #dde2e9;
