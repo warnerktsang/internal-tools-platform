@@ -18,14 +18,15 @@ After any machine/container restart, re-run `db:seed` — record IDs are cuids a
 so never hardcode refund IDs; get them from the list pages (`/r/refunds`, `/r/payments`).
 
 ## Acting as different people
-There is no login. The header has an "Acting as" `<select>` + **Switch** button that sets a signed
-cookie. A fresh browser profile shows "No principal selected" — pick someone first.
-Seeded principals: Sofia Ramos (support_agent, bu-consumer), Dan Whitfield (support_agent, bu-smb),
-Priya Nair (finance_manager, bu-consumer — the only eligible refund approver), Ava Chen (auditor, global
-read), Nadia Haddad (kyc_analyst, bu-consumer), Lea Fontaine (kyc_analyst, bu-consumer — second
-same-BU analyst, use her for holder-exclusivity tests), Raj Patel (kyc_analyst, bu-smb), Omar Diallo
-(compliance_officer, global — the KYC approver). System principal `sys-refund-settler` performs outbox
-effects.
+There is no login. The sidebar has an "Acting as" context switcher (a `<select>` that submits on
+change) which sets a signed cookie. A fresh browser profile shows "No principal selected" — pick
+someone first.
+Seeded principals: Sofia Ramos (support_agent, bu-consumer), Priya Nair (finance_manager,
+bu-consumer — the only eligible refund approver), Nadia Haddad (kyc_analyst, bu-consumer), Omar
+Diallo (compliance_officer, global — the KYC approver), Sam Okafor (engineer, development+staging),
+Renee Lindqvist and Mira Kovács (release_manager, all environments — two of them so production flag
+changes can be countersigned), Ava Chen (auditor, global read). System principals
+`sys-refund-settler` and `sys-flag-publisher` perform outbox effects.
 
 ## Reaching each behaviour through the UI
 - Draft a refund: payment detail (`/r/payments/<id>`) → "Request a refund" panel (Amount, Reason,
@@ -38,7 +39,7 @@ effects.
   state `unknown` (reconcilable, truth is "succeeded"); ending in `07` → hard decline → state `failed`;
   anything else → `succeeded`. So $40.13 and $40.07 are the cheap ways to exercise unknown vs failed.
 - `reconcile` is only enabled while state is `unknown` and only for `finance_manager`.
-- Scope isolation: as Sofia, `/r/payments/pay-smb-1` renders an "Access denied" card; list headers show
+- Scope isolation: as Sofia, `/r/payments/pay-smb-1` (or `/r/kyc-cases/kyc-4`, both bu-smb) renders an "Access denied" card; list headers show
   "N visible · scoped to business_unit …" and N must equal the rendered row count.
 - Audit: `/audit` (any principal, meaningful as Ava) shows a "verified · N events" hash-chain badge plus
   every write/decision/auth_denied event.
@@ -89,7 +90,7 @@ doc**, a `reject` already parked awaiting compliance), `kyc-4` KYC-5001 (bu-smb)
   `kyc_case:decide`, so Omar can only act through the "Awaiting approval" card — his panel buttons are
   correctly disabled. On approval the case applies **the requester's** reason, not the approver's note.
 - Holder exclusivity: a claimed case can only be decided by its assignee. To test, claim as Nadia then
-  act as Lea (same bu-consumer, so she can read the case with PII masked). Any decide action returns a
+  act as Omar (global read, so he can read the case with PII masked). Any decide action returns a
   slate **Invalid** banner `the case is claimed by usr-nadia; only they can decide it` — `invalid`
   (domain), deliberately not `denied` (authority). `release` behaves the same way. `claim` is refused
   differently: it is state-based, so the generated button renders *disabled* with the title

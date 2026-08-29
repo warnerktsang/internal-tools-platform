@@ -1,6 +1,8 @@
 /**
- * The demo cast. Roles and scopes are database rows, so the policy engine treats these
- * exactly as it would principals from a real IdP — only the login is fake.
+ * The demo cast, kept to the smallest set that can still reach every path: one principal per
+ * app, plus the second signer each countersigned flow requires, plus an auditor. Roles and
+ * scopes are database rows, so the policy engine treats these exactly as it would principals
+ * from a real IdP — only the login is fake.
  */
 import type { Principal } from '@/substrate/types';
 
@@ -13,15 +15,6 @@ export const DEMO_PRINCIPALS: Principal[] = [
     title: 'Support agent, Consumer',
     roles: ['support_agent'],
     scopes: { business_unit: ['bu-consumer'] },
-  },
-  {
-    id: 'usr-dan',
-    kind: 'human',
-    email: 'dan@example.com',
-    displayName: 'Dan Whitfield',
-    title: 'Support agent, SMB',
-    roles: ['support_agent'],
-    scopes: { business_unit: ['bu-smb'] },
   },
   {
     id: 'usr-priya',
@@ -40,26 +33,6 @@ export const DEMO_PRINCIPALS: Principal[] = [
     title: 'KYC analyst, Consumer',
     roles: ['kyc_analyst'],
     scopes: { business_unit: ['bu-consumer'] },
-  },
-  {
-    // A second analyst in the same business unit, so "the case is claimed by someone else"
-    // is a state the demo can actually reach.
-    id: 'usr-lea',
-    kind: 'human',
-    email: 'lea@example.com',
-    displayName: 'Lea Fontaine',
-    title: 'KYC analyst, Consumer',
-    roles: ['kyc_analyst'],
-    scopes: { business_unit: ['bu-consumer'] },
-  },
-  {
-    id: 'usr-raj',
-    kind: 'human',
-    email: 'raj@example.com',
-    displayName: 'Raj Patel',
-    title: 'KYC analyst, SMB',
-    roles: ['kyc_analyst'],
-    scopes: { business_unit: ['bu-smb'] },
   },
   {
     // Global by role, not by scope grant: compliance signs off everywhere.

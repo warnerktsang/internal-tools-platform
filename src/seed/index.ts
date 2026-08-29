@@ -295,15 +295,6 @@ async function seedRefundScenarios(): Promise<void> {
     refundId: settled,
     processorRef: 'pi_RF-2001',
   });
-
-  // 5. A draft in the other business unit, so cross-scope denial is one click away.
-  await draftRefund({
-    requester: 'usr-dan',
-    paymentId: 'pay-smb-1',
-    reference: 'RF-3001',
-    amountMinor: 45_000,
-    reason: 'contract cancelled mid-term',
-  });
 }
 
 async function seedKycScenarios(): Promise<void> {
